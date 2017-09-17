@@ -8,11 +8,11 @@ Department of Petroleum Engineering, Univeristy of Louisiana at Lafayette, Lafay
 </p>
 
 `PyGRDECL` is a open source library for converting a Eclipse grid with properties to a vtu-file.
-(to be opened in ParaView for example)
-
-# Read a simple grid file
+(to be opened in ParaView for example). `PyVTK` (https://pypi.python.org/pypi/PyVTK) is required to write unstructure grid vtk files. 
 
 After downloading and unzipping the current <a href="https://github.com/BinWang0213/PyGRDECL/archive/master.zip">repository</a>, navigate to the library directory and run a simple example contained in `Example.ipynb`:
+
+# Read a simple grid file
 
 <p align="center">
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/Fault.png" height="300">
