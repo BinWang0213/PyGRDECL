@@ -6,7 +6,7 @@ Department of Petroleum Engineering, Univeristy of Louisiana at Lafayette, Lafay
 `PyGRDECL` is a open source library for converting a Eclipse grid with properties to a vtu-file.
 (to be opened in ParaView for example)
 
-# Read a simpole grid file
+# Read a simple grid file
 
 <p align="center">
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/PermX.png" height="300">
