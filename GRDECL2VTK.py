@@ -14,7 +14,6 @@
 import numpy as np
 from pyvtk import *
 
-
 #############################################
 #
 #  Core Eclipse File Read/View/Analysis Class
@@ -120,6 +119,50 @@ class GRDECL_Viewer:
                 self.PERMY=block_dataset
             if(block_id==8):
                 self.PERMZ=block_dataset
+    
+    def field_update(self,var="PERMX",val=100.0,nx_range=(0,-1),ny_range=(0,-1),nz_range=(0,-1)):
+        """Update/modify Permeability/Porosity field with given grid block range
+        
+        Arguments
+        ---------
+        var         -- The varable name you want to update, e.g PERMX, PERMY or PERMZ
+        val         -- The varable value you want to update
+        nx_range    -- The specifc grid range in x for updating 
+        nx_range    -- The specifc grid range in y for updating
+        nz_range    -- The specifc grid range in z for updating
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+        """
+        nx_range=np.array(nx_range)
+        ny_range=np.array(ny_range)
+        nz_range=np.array(nz_range)
+        #If no nx,ny,nz range are defined, all perm will be updated       
+        if(nx_range[1]==-1):
+            nx_range[1] = self.NX
+        if(ny_range[1] == -1):
+            ny_range[1] = self.NY
+        if(nz_range[1]==-1):
+            nz_range[1] = self.NZ
+
+        #Update perm field with specific grid range
+        for k in range(self.NZ):
+            for j in range(self.NY):
+                for i in range(self.NX):
+                    if(i>=nx_range[0] and i<=nx_range[1]):
+                        if(j>=ny_range[0] and j<=ny_range[1]):
+                            if(k>=nz_range[0] and k<=nz_range[1]):
+                                ijk = getIJK(i, j, k, self.NX, self.NY, self.NZ)
+                                if(var=="PERMX"):
+                                    self.PERMX[ijk]=val
+                                if(var=="PERMY"):
+                                    self.PERMY[ijk]=val
+                                if(var=="PERMZ"):
+                                    self.PERMZ[ijk]=val
+                                if(var=="PORO"):
+                                    self.PORO[ijk]=val
+        
+
 
     def calc_Trans(self):
         """Calculate the transmisability for each gridblock
@@ -241,17 +284,16 @@ class GRDECL_Viewer:
                 Trans_face=0
         
         return fault_face,Trans_face
-        
 
     def write_VTU(self,filename,mode=0):
-        """#Convert GRDECL format to unstructured VTU for visulization using Paraview
+        """Convert GRDECL format to unstructured VTU for visulization using Paraview
 
         Arguments
         ---------
         mode    --  0-Perm_Poro  1-transmisability 2-fault condition
 
-        Programmer: Yin Feng (yin.feng@louisiana.edu)
-        Creation:   May, 2016
+        Programmer: Bin Wang (yin.feng@louisiana.edu)
+        Creation:   Sep, 2017
         """
         
         debug=0
@@ -327,6 +369,38 @@ class GRDECL_Viewer:
         print('Number of nodes:',len(points))
         print('Number of GB:',len(Cell_hex))
         print('%s.vtk successfully genetrated, pelase use Paraview to open it!'%(fname))
+
+
+    def write_NPSL(self,filehead):
+        """Write the permeability/porosity field for NPSL
+
+            filename_permx.txt
+            filename_permy.txt
+            filename_permz.txt
+            filename_poro.txt
+
+            Arguments
+            ---------
+            filename    -- The surname of permeability and porosity data files 
+
+            Programmer: Bin Wang (yin.feng@louisiana.edu)
+            Creation:   Feb, 2018
+        """
+        np.savetxt(filehead + "_permx.txt", self.PERMX, delimiter="\n",fmt='%1.4f')
+        np.savetxt(filehead + "_permy.txt", self.PERMY, delimiter="\n",fmt='%1.4f')
+        np.savetxt(filehead + "_permz.txt", self.PERMZ, delimiter="\n",fmt='%1.4f')
+        np.savetxt(filehead + "_poro.txt",  self.PORO, delimiter="\n",fmt='%1.4f')
+        print('\n--------Output----------\nDimension(NX,NY,NZ): (%s X %s X %s)'%(self.NX,self.NY,self.NZ))
+        print('Number of GB:', self.N)
+        print('%s successfully genetrated, pelase use NPSL to load it!' % (filehead + "_permx.txt"))
+        print('%s successfully genetrated, pelase use NPSL to load it!' % (filehead + "_permy.txt"))
+        print('%s successfully genetrated, pelase use NPSL to load it!' % (filehead + "_permz.txt"))
+        print('%s successfully genetrated, pelase use NPSL to load it!' % (filehead + "_poro.txt"))
+
+
+
+
+
 
 #############################################
 #
@@ -478,25 +552,35 @@ def DY2CoordY(DY,NX,NY,NZ):
 def TOPSDZ2CoordZ(TOPS,DZ,NX,NY,NZ):
     #Convert self.DZ and Self.TOPS to coordiantes-z of unstructure gridblocks
     #Used in [write_VTU]
-    debug=1
+    debug=0
     coordZ=np.zeros((2*NX,2*NY,2*NZ))
     for k in range(2*NZ):
         for j in range(2*NY):
             for i in range(2*NX):
                 #print(DX[i][j])
                 i_GB,j_GB,k_GB=(int)(i/2),(int)(j/2),(int)(k/2)
-                ijk_GB=getIJK(i_GB,j_GB,k_GB,NX,NY,NZ)
+                if(k==0):
+                    coordZ[i][j][0]=0
+                    if(debug and i==0 and k==0):print('First Node',(0),'-')
+                if(k>0 and k%2==0):
+                    ijk_GB=getIJK(i_GB,j_GB,k_GB-1,NX,NY,NZ)
+                    coordZ[i][j][k-1]=DZ[ijk_GB] #odd
+                    coordZ[i][j][k]=DZ[ijk_GB] #even
+                    if(debug and i==0 and k==0):print('pair',(k-1,k),(i_GB,k_GB-1))
+                    if(k_GB>1):
+                        coordZ[i][j][k-1]+=coordZ[i][j][k-1-1]
+                        coordZ[i][j][k]=coordZ[i][j][k-1]
+                if(k==2*NZ-1):
+                    ijk_GB=getIJK(i_GB,NY-1,k_GB,NX,NY,NZ)
+                    coordZ[i][j][2*NZ-1]=DZ[ijk_GB]+coordZ[i][j][2*NZ-1-1]
+                    if(debug and i==0 and k==0):print('Last Node',(2*NY-1),(i_GB,NY-1))
                 
-                if(k==0):#First layer is always start from top
-                    coordZ[i][j][0]=TOPS[ijk_GB]
-                else:
-                    coordZ[i][j][k]=TOPS[ijk_GB]+DZ[ijk_GB]
     return coordZ
 #/
 
 ######[calc_Trans]######
 def check_fault(ijk1,ijk2,TOPS,DZ):
-    #Check the fault situation between two neighboring blocks (ijk1, ijk2)
+    # Check the fault situation between two neighboring blocks (ijk1, ijk2)
     # Gridblock1    TOPS1------TOPS1+DZ1
     # Gridblock2        TOPS2------TOPS2+DZ2
 
