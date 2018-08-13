@@ -59,7 +59,8 @@ class GRDECL_Viewer:
         self.PORO=[]
 
         #Read GRDECL file when initializing the class
-        self.read_GRDECL()
+        if(len(filename)>0):
+            self.read_GRDECL()
 
         #Derived variabls 
         self.Trans_i0,self.Trans_i1=np.zeros(self.N),np.zeros(self.N)
@@ -69,6 +70,9 @@ class GRDECL_Viewer:
         self.fault_i0,self.fault_i1=np.zeros(self.N),np.zeros(self.N)
         self.fault_j0,self.fault_j1=np.zeros(self.N),np.zeros(self.N)
 
+    def print_self(self):
+        print('Dimension(NX,NY,NZ): (%s X %s X %s)'%(self.NX,self.NY,self.NZ))
+        print('NumofGBs: %s'%(self.N))
     
     def read_GRDECL(self):
         """Read input file(GRDECL) of Reservoir Simulator- Petrel (Eclipse)  
@@ -77,6 +81,7 @@ class GRDECL_Viewer:
         Arguments
         ---------
         NX, NY, NZ -- Grid dimension.
+        blockData_raw -- [0] Keywords [1] values
         
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Sep. 2017
@@ -92,34 +97,126 @@ class GRDECL_Viewer:
             block_id=0
             
             block_dataset=[]
-            blk_id=0
+            block_id=0
             if(len(blockData_raw)>0):
-                block_id,block_dataset=getBlkdata(blockData_raw,self.N)
-                if(debug):
-                    print('block',i)
-                    print(block_id,block_dataset)
-            
-            block_dataset=np.array(block_dataset,dtype=float)
-            #print(block_dataset.shape,block_dataset)
-            
+                if(".dat" not in blockData_raw[1]):
+                    block_id,block_dataset=getBlkdata(blockData_raw,self.N)
+                    if(debug):
+                        print('block',i)
+                        print(block_id,block_dataset)
+                
+                    block_dataset=np.array(block_dataset,dtype=float)
+                else:
+                    block_id=block_indicator(blockData_raw[0])
+                    block_dataset=self.read_IncludeFile('./Example/'+blockData_raw[1],self.N)
+                        #print(block_dataset.shape,block_dataset)
+
             #Assign read dataset to corrsponding Variables(DX,DY...etc)
-            if(block_id==1):
-                self.TOPS=block_dataset
-            if(block_id==2):
-                self.DX=block_dataset
-            if(block_id==3):
-                self.DY=block_dataset
-            if(block_id==4):
-                self.DZ=block_dataset*1
-            if(block_id==5):
-                self.PORO=block_dataset
-            if(block_id==6):
-                self.PERMX=block_dataset
-            if(block_id==7):
-                self.PERMY=block_dataset
-            if(block_id==8):
-                self.PERMZ=block_dataset
+                if(block_id==1):
+                    self.TOPS=block_dataset
+                if(block_id==2):
+                    self.DX=block_dataset
+                if(block_id==3):
+                    self.DY=block_dataset
+                if(block_id==4):
+                    self.DZ=block_dataset
+                if(block_id==5):
+                    self.PORO=block_dataset
+                if(block_id==6):
+                    self.PERMX=block_dataset
+                if(block_id==7):
+                    self.PERMY=block_dataset
+                if(block_id==8):
+                    self.PERMZ=block_dataset
     
+    def read_IncludeFile(self,filename_include,NumData):
+        """Read Include data file
+        this data file just a series of values
+        e.g. 0.2 0.3 12.23 ....
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Aug. 2018
+        """
+
+        f=open(filename_include)
+        contents=f.read()
+        block_dataset=contents.strip().split() #Sepeart input file by slash /
+        block_dataset=np.array(block_dataset,dtype=float)
+        if(len(block_dataset)!=NumData):
+            print('Data size %s is not equal to defined block dimension (NX*NY*NZ) %s'%(len(block_dataset),NumData))
+        return block_dataset
+
+    def field_cutter(self,nx_range=(0,-1),ny_range=(0,-1),nz_range=(0,-1)):
+        """Extract the subset of a domain
+        
+        Arguments
+        ---------
+        nx_range    -- The specifc grid range in x for the subset 
+        nx_range    -- The specifc grid range in y for the subset 
+        nz_range    -- The specifc grid range in z for the subset 
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+        """
+
+        #If no nx,ny,nz range are defined, all perm will be updated       
+        if(nx_range[1]==-1):
+            nx_range[1] = self.NX
+        if(ny_range[1] == -1):
+            ny_range[1] = self.NY
+        if(nz_range[1]==-1):
+            nz_range[1] = self.NZ
+
+        NX_new=nx_range[1]
+        NY_new=ny_range[1]
+        NZ_new=nz_range[1]
+        N_new=NX_new*NY_new*NZ_new
+
+        TOPS_new=np.zeros(N_new)
+        DX_new=np.zeros(N_new)
+        DY_new=np.zeros(N_new)
+        DZ_new=np.zeros(N_new)
+
+        PERMX_new=np.zeros(N_new)
+        PERMY_new=np.zeros(N_new)
+        PERMZ_new=np.zeros(N_new)
+        PORO_new=np.zeros(N_new)
+
+        ijk_new=0
+        for k in range(self.NZ):
+            for j in range(self.NY):
+                for i in range(self.NX):
+                    if(i>=nx_range[0] and i<=nx_range[1]):
+                        if(j>=ny_range[0] and j<=ny_range[1]):
+                            if(k>=nz_range[0] and k<=nz_range[1]):
+                                ijk = getIJK(i, j, k, self.NX, self.NY, self.NZ)
+                                DX_new[ijk_new]=self.DX[ijk]
+                                DY_new[ijk_new]=self.DY[ijk]
+                                DZ_new[ijk_new]=self.DZ[ijk]
+                                TOPS_new[ijk_new]=self.TOPS[ijk]
+
+                                PERMX_new[ijk_new]=self.PERMX[ijk]
+                                PERMY_new[ijk_new]=self.PERMY[ijk]
+                                PERMZ_new[ijk_new]=self.PERMZ[ijk]
+                                PORO_new[ijk_new]=self.PORO[ijk]
+                                ijk_new=ijk_new+1
+        
+        NewGrid=GRDECL_Viewer('',NX_new,NY_new,NZ_new)
+        NewGrid.DX=DX_new
+        NewGrid.DY=DY_new
+        NewGrid.DZ=DZ_new
+        NewGrid.TOPS=self.TOPS
+        NewGrid.PERMX=PERMX_new
+        NewGrid.PERMY=PERMY_new
+        NewGrid.PERMZ=PERMZ_new
+        NewGrid.PORO=PORO_new
+        NewGrid.print_self()
+        return NewGrid
+
+
     def field_update(self,var="PERMX",val=100.0,nx_range=(0,-1),ny_range=(0,-1),nz_range=(0,-1)):
         """Update/modify Permeability/Porosity field with given grid block range
         
@@ -346,7 +443,7 @@ class GRDECL_Viewer:
         
         ######Field Data Information######
         if(mode==0):
-            celldata=CellData(Scalars(self.PORO*0.01,name='phi'),
+            celldata=CellData(Scalars(self.PORO,name='phi'),
                         Scalars(self.PERMX,name='kx'),
                         Scalars(self.PERMY,name='ky'),
                         Scalars(self.PERMZ,name='kz'))
@@ -450,8 +547,8 @@ def getBlkdata(blockData,N):
         else:#Normal Data
             blk_dataset.append(data)
     
-    if(len(blk_dataset)!=N):
-        print('Data size %s is not equal to defined block dimension (NX*NY*NZ) %s'%(len(blk_dataset),N))
+    if(len(blk_dataset)!=N and len(blk_dataset)!=2):
+        print('Data%s size %s is not equal to defined block dimension (NX*NY*NZ) %s'%(blk_id,len(blk_dataset),N))
     #print(blockData)
     #print(blk_id,blk_dataset)    
     return blk_id,blk_dataset
