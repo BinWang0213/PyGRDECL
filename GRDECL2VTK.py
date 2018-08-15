@@ -259,128 +259,28 @@ class GRDECL_Viewer:
                                 if(var=="PORO"):
                                     self.PORO[ijk]=val
         
+    def write_Ascii(self,filehead):
+        """Output Perm Field Into several files
+        permx.dat
+        permy.dat
+        permz.dat
+        poro.dat
 
+        first line include NX NY NZ info
 
-    def calc_Trans(self):
-        """Calculate the transmisability for each gridblock
-            Fault has to be detected, which affects the flow cross-section
-
-        Arguments
-        ---------
-        GB index:  m-previous  p-next
-        i-direction    ...|imjk| ijk |ipjk|...
-        j-direction    ...|ijmk| ijk |ijpk|...
-        k-direction    ...|ijkm| ijk |ijkp|...
-        Khalfijk(p,m)	--harmonic average permeability in i,j,k direction
-        TransIJKP,M		--Transmisability in i,j,k direction
-
-        Programmer: Yin Feng (yin.feng@louisiana.edu)
-        Creation:   May, 2016
-        """
-        debug=0
-        NX,NY,NZ=self.NX,self.NY,self.NZ
-
-        #Adding virtual gridblocks around the boundary
-        kx=np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        ky=np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        kz=np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        A_i0,A_i1=np.zeros((NX + 2)*(NY + 2)*(NZ + 2)),np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        A_j0,A_j1=np.zeros((NX + 2)*(NY + 2)*(NZ + 2)),np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        A_k0,A_k1=np.zeros((NX + 2)*(NY + 2)*(NZ + 2)),np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        dx=np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        dy=np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-        dz=np.zeros((NX + 2)*(NY + 2)*(NZ + 2))
-
-        for k in range(1,NZ+1): #[1,NZ]
-            for j in range(1,NY+1): #[1,NY]
-                for i in range(1,NX+1):#[1,NX]
-                    ijk_flow=getIJK(i,j,k,NX+2,NY+2,NZ+2)
-                    ijk=getIJK(i-1,j-1,k-1,NX,NY,NZ)
-                    
-                    kx[ijk_flow]=self.PERMX[ijk]
-                    ky[ijk_flow]=self.PERMY[ijk]
-                    kz[ijk_flow]=self.PERMZ[ijk]
-                    dx[ijk_flow]=self.DX[ijk]
-                    dy[ijk_flow]=self.DY[ijk]
-                    dz[ijk_flow]=self.DZ[ijk]
-
-                    if(self.GRID_type==0):#Cartesian GB
-                        A_i0[ijk_flow]=self.DY[ijk]*self.DZ[ijk]
-                        A_i1[ijk_flow]=A_i0[ijk_flow]
-                        A_j0[ijk_flow]=self.DX[ijk]*self.DZ[ijk]
-                        A_j1[ijk_flow]=A_j0[ijk_flow]
-                        A_k0[ijk_flow]=self.DX[ijk]*self.DY[ijk]
-                        A_k1[ijk_flow]=A_k0[ijk_flow]
-
-        #Calcualte transmisability in six direction(i01,j01,k01)
-        for k in range(NZ):  
-            for j in range(NY):
-                for i in range(NX):
-                    #7 point scheme
-                    ijk,ijk_flow=getIJK(i,j,k,NX,NY,NZ),getIJK(i+1,j+1,k+1,NX+2,NY+2,NZ+2)
-                    ijk_i0,ijk_i0_flow=getIJK(i-1,j,k,NX,NY,NZ),getIJK(i,j+1,k+1,NX+2,NY+2,NZ+2)
-                    ijk_i1,ijk_i1_flow=getIJK(i+1,j,k,NX,NY,NZ),getIJK(i+2,j+1,k+1,NX+2,NY+2,NZ+2)
-                    ijk_j0,ijk_j0_flow=getIJK(i,j-1,k,NX,NY,NZ),getIJK(i+1,j,k+1,NX+2,NY+2,NZ+2)
-                    ijk_j1,ijk_j1_flow=getIJK(i,j+1,k,NX,NY,NZ),getIJK(i+1,j+2,k+1,NX+2,NY+2,NZ+2)
-                    ijk_k0,ijk_k0_flow=getIJK(i,j,k-1,NX,NY,NZ),getIJK(i+1,j+1,k,NX+2,NY+2,NZ+2)
-                    ijk_k1,ijk_k1_flow=getIJK(i,j,k+1,NX,NY,NZ),getIJK(i+1,j+1,k+2,NX+2,NY+2,NZ+2)
-
-                    #debug
-                    if(debug==1 and i==5 and j==3 and k==0):
-                        #print(ijk)
-                        #print(ijk_flow,ijk_i0_flow,ijk_i1_flow,ijk_j0_flow,ijk_j1_flow,ijk_k0_flow,ijk_k1_flow)
-                        print(self.PERMX[ijk],kx[ijk_flow],self.PERMX[ijk_i0],kx[ijk_i0_flow],self.PERMX[ijk_j0],kx[ijk_j0_flow])
-                        print(self.PERMY[ijk],ky[ijk_flow],self.PERMY[ijk_i0],ky[ijk_i0_flow],self.PERMY[ijk_j0],ky[ijk_j0_flow])
-                        print(A_i0[ijk_flow],kx[ijk_flow],dx[ijk_flow],A_i1[ijk_i0_flow],kx[ijk_i0_flow],dx[ijk_i0_flow],ijk,ijk_i0) #Tx0
-
-                    #T_avg=A1k1*A2k2/(A1K1DX2+A2K2DX1)   A1,K1 always ijk  A2k2 always six neighbors
-                    self.fault_i0[ijk],self.Trans_i0[ijk]=self.calc_FaceT(A_i0[ijk_flow],kx[ijk_flow],dx[ijk_flow],
-                                                                          A_i1[ijk_i0_flow],kx[ijk_i0_flow],dx[ijk_i0_flow],
-                                                                          ijk,ijk_i0)
-                    self.fault_i1[ijk],self.Trans_i1[ijk]=self.calc_FaceT(A_i1[ijk_flow],kx[ijk_flow],dx[ijk_flow],
-                                                                          A_i0[ijk_i1_flow],kx[ijk_i1_flow],dx[ijk_i1_flow],
-                                                                          ijk,ijk_i1)
-                    self.fault_j0[ijk],self.Trans_j0[ijk]=self.calc_FaceT(A_j0[ijk_flow],ky[ijk_flow],dy[ijk_flow],
-                                                                          A_j1[ijk_j0_flow],ky[ijk_j0_flow],dy[ijk_j0_flow],
-                                                                          ijk,ijk_j0)
-                    self.fault_j1[ijk],self.Trans_j1[ijk]=self.calc_FaceT(A_j1[ijk_flow],ky[ijk_flow],dy[ijk_flow],
-                                                                          A_j0[ijk_j1_flow],ky[ijk_j1_flow],dy[ijk_j1_flow],
-                                                                          ijk,ijk_j1)
-                    temp,self.Trans_k0[ijk]=self.calc_FaceT(A_k0[ijk_flow],kz[ijk_flow],dz[ijk_flow],
-                                                       A_k1[ijk_k0_flow],kz[ijk_k0_flow],dz[ijk_k0_flow])
-                    temp,self.Trans_k1[ijk]=self.calc_FaceT(A_j1[ijk_flow],ky[ijk_flow],dz[ijk_flow],
-                                                       A_j0[ijk_k1_flow],ky[ijk_k1_flow],dz[ijk_k1_flow])
-                    
-    def calc_FaceT(self,A1,k1,dx1,A2,k2,dx2,ijk=-1,ijk_neigh=-1):
-        """Calculate the transmisability for each face
-           T_avg=A1k1*A2k2/(A1K1DX2+A2K2DX1)
-           
-
-        Arguments
-        ---------
-        ijk         -- The index of center GB
-        ijk_neigh   -- The index of connected GB
-        A1,K1       -- Area, Perm of center GB  
-        A2,k2       -- Area, Perm of connected GB
-        fault_face  -- fault condition of center GB at interested face, 0-sealing 1-fully connect 0.5-partially connect
-
-        Programmer: Bin Wang (binwang.0213@gmail.com)
+        Programmer: Bin Wang (yin.feng@louisiana.edu)
         Creation:   Sep, 2017
         """
-        Trans_face=0
-        fault_face=0
-        
-        if(A2*k2==0): #Hit boundary
-            Trans_face=0
-            fault_face=0
-        else:
-            if(ijk!=-1 and ijk_neigh!=-1):#X and Y direction for fault check
-                fault_face=check_fault(ijk,ijk_neigh,self.TOPS,self.DZ)
-            Trans_face=2*1.127e-3*A1*k1*A2*k2/(A1*k1*dx2+A2*k2*dx1)
-            if(fault_face==0): #Sealing fault in this face 
-                Trans_face=0
-        
-        return fault_face,Trans_face
+        headline='Dimension(NX,NY,NZ): (%s X %s X %s) N=%s'%(self.NX,self.NY,self.NZ,self.N)
+        np.savetxt(filehead + "_permx.txt", self.PERMX, delimiter="\n",fmt='%1.4f',header=headline)
+        np.savetxt(filehead + "_permy.txt", self.PERMY, delimiter="\n",fmt='%1.4f',header=headline)
+        np.savetxt(filehead + "_permz.txt", self.PERMZ, delimiter="\n",fmt='%1.4f',header=headline)
+        np.savetxt(filehead + "_poro.txt",  self.PORO, delimiter="\n",fmt='%1.4f',header=headline)
+        print(headline)
+        print('%s successfully genetrated!' % (filehead + "_permx.txt"))
+        print('%s successfully genetrated!' % (filehead + "_permy.txt"))
+        print('%s successfully genetrated!' % (filehead + "_permz.txt"))
+        print('%s successfully genetrated!' % (filehead + "_poro.txt"))
 
     def write_VTU(self,filename,mode=0):
         """Convert GRDECL format to unstructured VTU for visulization using Paraview
