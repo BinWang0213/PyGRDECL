@@ -170,9 +170,9 @@ class GRDECL_Viewer:
         if(nz_range[1]==-1):
             nz_range[1] = self.NZ
 
-        NX_new=nx_range[1]
-        NY_new=ny_range[1]
-        NZ_new=nz_range[1]
+        NX_new=nx_range[1]-nx_range[0]+1
+        NY_new=ny_range[1]-ny_range[0]+1
+        NZ_new=nz_range[1]-nz_range[0]+1
         N_new=NX_new*NY_new*NZ_new
 
         TOPS_new=np.zeros(N_new)
