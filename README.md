@@ -10,7 +10,7 @@ Department of Petroleum Engineering, Univeristy of Louisiana at Lafayette, Lafay
 `PyGRDECL` is a open source library for converting a Eclipse grid with properties to a vtu-file.
 (to be opened in ParaView for example). `Anaconda 5.3` (https://www.anaconda.com/download/) is required to run the code. 
 
-After downloading and unzipping the current <a href="https://github.com/BinWang0213/PyGRDECL/archive/master.zip">repository</a>, navigate to the library directory and run a simple example contained in `Example.ipynb`:
+After downloading and unzipping the current <a href="https://github.com/BinWang0213/PyGRDECL/archive/master.zip">repository</a>, navigate to the library directory and run a simple example contained in `Example_GettingStart.ipynb`:
 
 # Read a simple grid file
 
