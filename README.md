@@ -12,11 +12,11 @@ Department of Petroleum Engineering, Univeristy of Louisiana at Lafayette, Lafay
 
 ## Install & Usage
 
-`Anaconda 5.3` (https://www.anaconda.com/download/) and `Shapely 1.5` (https://anaconda.org/scitools/shapely) is required to be installed.
+`Anaconda 5.3` (https://www.anaconda.com/download/) and `Shapely 1.5` (https://anaconda.org/scitools/shapely) is required. The library is works on both Windows and Linux.
 
 After downloading and unzipping the current <a href="https://github.com/BinWang0213/PyGRDECL/archive/master.zip">repository</a>, navigate to the library directory and run a simple example contained in `Example_GettingStart.ipynb`:
 
-## Read a simple grid file
+## Getting Start
 
 <p align="center">
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/DomeModel.png" height="300">
