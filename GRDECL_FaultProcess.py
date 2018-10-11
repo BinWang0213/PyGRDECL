@@ -29,9 +29,11 @@ import matplotlib
 from matplotlib.collections import PatchCollection
 
 #Shapely Geometry Computation Engine
-from shapely.geometry import LineString,Point,MultiLineString,MultiPoint,Polygon
-from shapely.ops import split,polygonize,nearest_points
-
+try:
+    from shapely.geometry import LineString,Point,MultiLineString,MultiPoint,Polygon
+    from shapely.ops import split,polygonize,nearest_points
+except ImportError:
+    warnings.warn("No shapely module loaded.")
 
 
 class FaultProcess:

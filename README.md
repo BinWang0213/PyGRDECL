@@ -7,12 +7,16 @@ Department of Petroleum Engineering, Univeristy of Louisiana at Lafayette, Lafay
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/GridPreview.png" height="300">
 </p>
 
-`PyGRDECL` is a open source library for converting a Eclipse grid with properties to a vtu-file.
-(to be opened in ParaView for example). `Anaconda 5.3` (https://www.anaconda.com/download/) is required to run the code. 
+`PyGRDECL` is a light-weight open source library for converting a Eclipse grid with properties to a vtu-file.
+(to be opened in ParaView for example). 
+
+## Install & Usage
+
+`Anaconda 5.3` (https://www.anaconda.com/download/) and `Shapely 1.5` (https://anaconda.org/scitools/shapely) is required to be installed.
 
 After downloading and unzipping the current <a href="https://github.com/BinWang0213/PyGRDECL/archive/master.zip">repository</a>, navigate to the library directory and run a simple example contained in `Example_GettingStart.ipynb`:
 
-# Read a simple grid file
+## Read a simple grid file
 
 <p align="center">
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/DomeModel.png" height="300">
@@ -27,7 +31,7 @@ Model=GeologyModel(filename='./ExampleData/dome.grdecl')
 #Convert ECLIPSE grdecl format into VTK
 Model.GRDECL2VTK()
 
-#Decompose the model into sub-volumes in terms of fault automatically
+#Decompose the model into sub-volumes in terms of faults automatically (this function requires shapely library)
 Model.decomposeModel()
 
 #Output to VTK format
