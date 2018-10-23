@@ -81,7 +81,7 @@ class FaultProcess:
         for j in range(NY):
             for i in range(NX):
                 CellFault=self.GRDECL_Data.findCellFault([i,j,0])
-                BdMarker,BDFaces=self.GRDECL_Data.isBoundaryCell([i,j,1])
+                BdMarker,BDFaces=self.GRDECL_Data.isBoundaryCell([i,j,1],Dim='2D')
                 FaultIndex=sum(CellFault)-BdMarker
                 if(FaultIndex>0): #We find a internal fault
                     #print('(%d,%d)'%(i,j),CellFault,FaultIndex,'BoundaryCell',BdMarker,BDFaces)

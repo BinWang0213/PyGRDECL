@@ -432,7 +432,7 @@ class GRDECL_Parser:
             return -1
 
 
-    def isBoundaryCell(self,Cell=[0,0,0]):
+    def isBoundaryCell(self,Cell=[0,0,0],Dim='3D'):
         ''' Check the a given cell is boundary cell or not
         
         Author:Bin Wang(binwang.0213@gmail.com)
@@ -453,17 +453,19 @@ class GRDECL_Parser:
         if(Cell[1]==self.NY-1): 
             count+=1
             face.append('Y+')
-        if(Cell[2]==0): 
-            count+=1
-            face.append('Z-')
-        if(Cell[2]==self.NZ-1): 
-            count+=1
-            face.append('Z-')
+        
+        if(Dim=="3D"):
+            if(Cell[2]==0): 
+                count+=1
+                face.append('Z-')
+            if(Cell[2]==self.NZ-1): 
+                count+=1
+                face.append('Z-')
 
         return count,face
 
     def findCellFault(self,Cell=[0,0,0]):
-        ''' Check the fault for 4 faces of a cell [X-,X+,Y-,Y+]
+        ''' Check the fault for 4 faces of a cell [X-,X+,Y-,Y+] 2D
         
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Sep. 2018
