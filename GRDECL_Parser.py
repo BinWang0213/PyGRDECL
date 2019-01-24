@@ -522,7 +522,7 @@ def RemoveCommentLines(data,commenter='--'):
     data_lines=data.strip().split('\n')
     newdata=[]
     for line in data_lines:
-        if line.startswith('--') or not line.strip():
+        if line.startswith(commenter) or not line.strip():
             # skip comments and blank lines
             continue   
         newdata.append(line)
