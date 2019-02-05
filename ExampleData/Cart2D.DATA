@@ -1,0 +1,76 @@
+ 
+RUNSPEC   =====================================================================
+ 
+TITLE
+validation 
+ 
+START
+1 'JAN' 2000 /
+ 
+FIELD
+ 
+FMTIN
+ 
+UNIFIN
+ 
+FMTOUT
+ 
+UNIFOUT
+ 
+ 
+WATER
+ 
+ 
+DIMENS
+50 50 1 /
+ 
+EQLDIMS
+ 1 100 10 1 1 /
+ 
+REGDIMS
+ 1 1 0 10 /
+ 
+TABDIMS
+ 1 1 16 12 1 12 20 1 /
+ 
+WELLDIMS
+ 3 2 2 3 /
+ 
+TRACERS
+0 1 0 0/
+
+GRID      ===============================================================
+ 
+GRIDFILE
+ 1 1 /
+ 
+INIT
+ 
+
+DX
+2500*20
+/
+ 
+DY
+2500*20
+/
+ 
+DZ
+2500*6 
+/
+ 
+TOPS
+2500*1000
+/
+ 
+PORO
+2500*0.3 /
+ 
+PERMX
+2500*300 /
+
+PERMY
+2500*300 /
+ 
+PERMZ
+2500*50 /

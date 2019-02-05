@@ -27,7 +27,7 @@ except ImportError:
 from GRDECL_Parser import *
 from GRDECL_FaultProcess import *
 #from GRDECL_CADExporter import *
-
+from utils import *
 
 #############################################
 #
@@ -65,10 +65,57 @@ class GeologyModel:
         self.GRDECL_Data.fname=filename
         self.GRDECL_Data.read_GRDECL()
 
+    def buildCartGrid(self,physDims=[100.0,100.0,10.0],gridDims=[10,10,1]):
+        #* Create simple cartesian grid 
+        self.GRDECL_Data.buildCartGrid(physDims,gridDims)
+
     def GRDECL2VTK(self):
         #* Convert corner point grid/cartesian grid into VTK unstructure grid
         print('[Geometry] Converting GRDECL to Paraview Hexahedron mesh data....')
         NX,NY,NZ=self.GRDECL_Data.NX,self.GRDECL_Data.NY,self.GRDECL_Data.NZ
+        
+        if(self.GRDECL_Data.GRID_type=='Cartesian'):
+            #1. Collect points from Cartesian data
+            debug=0
+            DX,DY,DZ,TOPS=self.GRDECL_Data.DX,self.GRDECL_Data.DY,self.GRDECL_Data.DZ,self.GRDECL_Data.TOPS
+            coordX,coordY,coordZ=Cartesian2UnstructGrid(DX,DY,DZ,TOPS,NX,NY,NZ)
+
+            Points = vtk.vtkPoints()
+            Points.SetNumberOfPoints(2*NX*2*NY*2*NZ) #=2*NX*2*NY*2*NZ
+
+            ptsid=0
+            for k in range(2*NZ):
+                for j in range(2*NY):
+                    for i in range(2*NX):
+                        x,y,z=coordX[i][j][k],coordY[i][j][k],coordZ[i][j][k]
+                        Points.SetPoint(ptsid,[x,y,z])
+                        ptsid+=1
+            self.VTK_Grids.SetPoints(Points)
+
+            #2. Recover Cells which follows the cartesian data
+            cellArray = vtk.vtkCellArray()
+            Cell=vtk.vtkHexahedron()
+
+            cellid=0
+            for k in range(NZ):
+                for j in range(NY):
+                    for i in range(NX):
+                        idx_GB=[getIJK(2*i,2*j,2*k,2*NX,2*NY,2*NZ),  #index-0
+                            getIJK(2*i+1,2*j,2*k,2*NX,2*NY,2*NZ),    #index-1
+                            getIJK(2*i+1,2*j+1,2*k,2*NX,2*NY,2*NZ),  #index-2
+                            getIJK(2*i,2*j+1,2*k,2*NX,2*NY,2*NZ),    #index-3
+                            getIJK(2*i,2*j,2*k+1,2*NX,2*NY,2*NZ),    #index-4
+                            getIJK(2*i+1,2*j,2*k+1,2*NX,2*NY,2*NZ),  #index-5
+                            getIJK(2*i+1,2*j+1,2*k+1,2*NX,2*NY,2*NZ),#index-6
+                            getIJK(2*i,2*j+1,2*k+1,2*NX,2*NY,2*NZ)]  #index-7
+                        for pi in range(8):
+                            Cell.GetPointIds().SetId(pi,idx_GB[pi])
+                        cellArray.InsertNextCell(Cell)
+                        cellid+=1
+            
+            self.VTK_Grids.SetCells(Cell.GetCellType(), cellArray)
+
+
         if(self.GRDECL_Data.GRID_type=='CornerPoint'):
             
             #1.Collect Points from the raw CornerPoint data [ZCORN]&[COORD]
@@ -107,14 +154,14 @@ class GeologyModel:
             
             self.VTK_Grids.SetCells(Cell.GetCellType(), cellArray)
 
-            print("     NumOfPoints",self.VTK_Grids.GetNumberOfPoints())
-            print("     NumOfCells",self.VTK_Grids.GetNumberOfCells())
+        
+        print("     NumOfPoints",self.VTK_Grids.GetNumberOfPoints())
+        print("     NumOfCells",self.VTK_Grids.GetNumberOfCells())
+        #3. Load grid properties data if applicable
+        for keyword,data in self.GRDECL_Data.SpatialDatas.items():
+            self.AppendScalarData(keyword,data)
 
-            #3. Load grid properties data if applicable
-            for keyword,data in self.GRDECL_Data.SpatialDatas.items():
-                self.AppendScalarData(keyword,data)
-
-            print('.....Done!')
+        print('     .....Done!')
     
     def decomposeModel(self):
         '''#* Identify and extract boundary/falut faces
@@ -166,13 +213,90 @@ class GeologyModel:
         
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
         self.AppendScalarData('SubVolumes',DomainMarker3D)
-    
+
     def AppendScalarData(self,name,numpy_array):
         #* Append scalar cell data (numpy array) into vtk object 
         data = ns.numpy_to_vtk(numpy_array.ravel(order='F'),deep=True, array_type=vtk.VTK_FLOAT)
         data.SetName(str(name))
         data.SetNumberOfComponents(1)
         self.VTK_Grids.GetCellData().AddArray(data)
+    
+    def UpdateCellData(self,varname,val=100,var="PERMX",nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1)):
+        """Update/modify Permeability/Porosity field with given grid block range
+        
+        Arguments
+        ---------
+        var         -- The varable name you want to update, e.g PERMX, PERMY or PERMZ
+        val         -- The varable value you want to update
+        nx_range    -- The specifc grid range in x for updating, 1-based index
+        nx_range    -- The specifc grid range in y for updating, 1-based index
+        nz_range    -- The specifc grid range in z for updating, 1-based index
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+        """
+
+        assert varname in self.GRDECL_Data.SpatialDatas, "[Error] Variable [%s] is not existed!"
+
+        nx_range=np.array(nx_range) 
+        ny_range=np.array(ny_range)
+        nz_range=np.array(nz_range)
+
+        #If no nx,ny,nz range are defined, all perm will be updated       
+        if(nx_range[1] == -1):
+            nx_range[1] = self.GRDECL_Data.NX
+        if(ny_range[1] == -1):
+            ny_range[1] = self.GRDECL_Data.NY
+        if(nz_range[1] == -1):
+            nz_range[1] = self.GRDECL_Data.NZ
+
+        #Convert 1-based index to 0-based index
+        nx_range=nx_range-1
+        ny_range=ny_range-1
+        nz_range=nz_range-1
+
+        #Update perm field with specific grid range
+        for k in range(self.GRDECL_Data.NZ):
+            for j in range(self.GRDECL_Data.NY):
+                for i in range(self.GRDECL_Data.NX):
+                    if(i>=nx_range[0] and i<=nx_range[1]):
+                        if(j>=ny_range[0] and j<=ny_range[1]):
+                            if(k>=nz_range[0] and k<=nz_range[1]):
+                                ijk = getIJK(i, j, k, self.GRDECL_Data.NX, self.GRDECL_Data.NY, self.GRDECL_Data.NZ)
+                                self.GRDECL_Data.SpatialDatas[varname][ijk]=val
+
+    
+    def WriteNPSL(self):
+        """Write the permeability/porosity field for NPSL
+
+            filename_permx.txt
+            filename_permy.txt
+            filename_permz.txt
+            filename_poro.txt
+
+            Arguments
+            ---------
+            filename    -- The surname of permeability and porosity data files 
+
+            Programmer: Bin Wang (yin.feng@louisiana.edu)
+            Creation:   Feb, 2018
+        """
+        basename=os.path.splitext(os.path.basename(self.fname))[0]
+        if not os.path.exists("Results"):
+            os.makedirs('Results')
+        fnames=[os.path.join('Results',basename + '_permx.txt'),
+               os.path.join('Results',basename + '_permy.txt'),
+               os.path.join('Results',basename + '_permz.txt'),
+               os.path.join('Results',basename + '_poro.txt')]
+
+        np.savetxt(fnames[0], self.GRDECL_Data.SpatialDatas['PERMX'], delimiter="\n",fmt='%1.4f')
+        np.savetxt(fnames[1], self.GRDECL_Data.SpatialDatas['PERMY'], delimiter="\n",fmt='%1.4f')
+        np.savetxt(fnames[2], self.GRDECL_Data.SpatialDatas['PERMZ'], delimiter="\n",fmt='%1.4f')
+        np.savetxt(fnames[3],  self.GRDECL_Data.SpatialDatas['PORO'], delimiter="\n",fmt='%1.4f')
+        
+        for name in fnames:
+            print('NPSL file [%s] successfully genetrated, pelase use NPSL to load it!' % (name))
+
 
     def Write2VTU(self):
         basename=os.path.splitext(os.path.basename(self.fname))[0]

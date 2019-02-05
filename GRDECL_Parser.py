@@ -35,6 +35,7 @@ KeyWordsDatatypes=[#Corrsponding data types
     float,float,float
 ]
 
+
 class GRDECL_Parser:
     def __init__(self,filename='',nx=0,ny=0,nz=0):
         """Eclipse Input file(GRDECL) Parser 
@@ -69,6 +70,7 @@ class GRDECL_Parser:
 
         #Petrophysics data Keywords
         self.SpatialDatas={}
+        self.SkipedKeywords=0
 
         #Read GRDECL file when initializing the class
         if(len(filename)>0):
@@ -104,12 +106,15 @@ class GRDECL_Parser:
 
         GoodFlag=0
         for i,block in enumerate(contents_in_block):#Keyword, Block-wise
+            #Clean the data where no spliter \ provided
+            block=scanKeyword(block)
+
             blockData_raw=block.strip().split()
             Keyword=''
             DataArray=[]
             if(len(blockData_raw)>1):
                 if(blockData_raw[0]=='ECHO'): #This keyword may next to real keyword
-                    Keyword,DataArray=blockData_raw[1],blockData_raw[2:]
+                    Keyword,DataArray=blockData_raw[1],blockData_raw[2:]                    
                 else:
                     Keyword,DataArray=blockData_raw[0],blockData_raw[1:]
 
@@ -119,6 +124,7 @@ class GRDECL_Parser:
                 self.GRID_type='Cartesian'
                 self.NX,self.NY,self.NZ=DataArray[0],DataArray[1],DataArray[2]
                 self.N=self.NX*self.NY*self.NZ
+                print("     Grid Type=%s Grid" %(self.GRID_type))
                 print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)"%(self.NX,self.NY,self.NZ))
                 print("     NumOfGrids=%s"%(self.N))
                 print('     NumOfKeywords=%s'%(NumKeywords))
@@ -130,6 +136,7 @@ class GRDECL_Parser:
                 self.GRID_type='CornerPoint'
                 self.NX,self.NY,self.NZ=DataArray[0],DataArray[1],DataArray[2]
                 self.N=self.NX*self.NY*self.NZ
+                print("     Grid Type=%s" %(self.GRID_type))
                 print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)"%(self.NX,self.NY,self.NZ))
                 print("     NumOfGrids=%s"%(self.N))
                 print('     NumOfKeywords=%s'%(NumKeywords))
@@ -139,14 +146,35 @@ class GRDECL_Parser:
             
             if(self.GRID_type=='NaN'):#Skip unnecessary keywords
                 continue
+
+            if(Keyword in SupportKeyWords): #We need parse the special format in 
+                DataArray=self.parseDataArray(DataArray)
+                #print(Keyword,DataArray)
             
+
             #Read Grid spatial information, x,y,z ordering
+            #Corner point cell
             if(Keyword=='COORD'):# Pillar coords
                 assert len(DataArray)==6*(self.NX+1)*(self.NY+1),'[Error] Incompatible COORD data size!'
                 self.COORD=np.array(DataArray,dtype=float)       
             elif(Keyword=='ZCORN'):# Depth coords
                 assert len(DataArray)==8*self.N, '[Error] Incompatible ZCORN data size!'
                 self.ZCORN=np.array(DataArray,dtype=float)
+            
+            #Cartesian cell
+            elif(Keyword=='DX'):# Grid size in X dir
+                assert len(DataArray)==self.N, '[Error] Incompatible DX data size!'
+                self.DX=np.array(DataArray,dtype=float)
+            elif(Keyword=='DY'):# Grid size in Y dir
+                assert len(DataArray)==self.N, '[Error] Incompatible DY data size!'
+                self.DY=np.array(DataArray,dtype=float)
+            elif(Keyword=='DZ'):# Grid size in Z dir
+                assert len(DataArray)==self.N, '[Error] Incompatible DZ data size!'
+                self.DZ=np.array(DataArray,dtype=float)
+            elif(Keyword=='TOPS'):# TOP position
+                assert len(DataArray)==self.N, '[Error] Incompatible TOPS data size!'
+                self.TOPS=np.array(DataArray,dtype=float)
+
             #Read Grid Properties information
             else:
                 self.LoadVar(Keyword,DataArray,DataSize=self.N)
@@ -154,7 +182,58 @@ class GRDECL_Parser:
         f.close()
         assert GoodFlag==1,'Can not find grid dimension info, [SPECGRID] or [DIMENS]!'
         print('.....Done!')
+
+
+        #Genetrate TOPS for cartesian grid if TOPS if not given
+        if(self.GRID_type=='Cartesian' and len(self.TOPS)==0):
+            self.TOPS=np.zeros(self.N)
+            for k in range(self.NZ-1):
+                for j in range(self.NY):
+                    for i in range(self.NX):
+                        ijk=getIJK(i,j,k,self.NX,self.NY,self.NZ)
+                        ijk_next=getIJK(i,j,k+1,self.NX,self.NY,self.NZ)
+                        self.TOPS[ijk_next] = self.TOPS[ijk] + self.DZ[ijk]
     
+
+    def buildCartGrid(self,physDim=[100.0,100.0,10.0],gridDims=[10,10,1]):
+        """Build simple cartesian grid 
+        
+        Arguments
+        ---------
+        physDim  -- physical dimensions of system
+        gridDims -- grid dimension of system
+
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2019
+        """
+        self.NX,self.NY,self.NZ=gridDims
+        self.N=self.NX*self.NY*self.NZ
+        self.GRID_type='Cartesian'
+
+
+        print("     Grid Type=%s Grid" %(self.GRID_type))
+        print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)"%(self.NX,self.NY,self.NZ))
+        print("     NumOfGrids=%s"%(self.N))
+
+        #Assign value to cart grid
+        self.DX=np.ones(self.N)*physDim[0]/self.NX
+        self.DY=np.ones(self.N)*physDim[1]/self.NY
+        self.DZ=np.ones(self.N)*physDim[2]/self.NZ
+        self.TOPS=np.zeros(self.N)
+        for k in range(self.NZ-1):
+                for j in range(self.NY):
+                    for i in range(self.NX):
+                        ijk=getIJK(i,j,k,self.NX,self.NY,self.NZ)
+                        ijk_next=getIJK(i,j,k+1,self.NX,self.NY,self.NZ)
+                        self.TOPS[ijk_next] = self.TOPS[ijk] + self.DZ[ijk]
+        
+        #Build up basic spatial propertis
+        self.SpatialDatas["PERMX"]=np.ones(self.N)*10.0
+        self.SpatialDatas["PERMY"]=np.ones(self.N)*10.0
+        self.SpatialDatas["PERMZ"]=np.ones(self.N)*10.0
+        self.SpatialDatas["PORO"]=np.ones(self.N)*0.3
+
+
     def LoadVar(self,Keyword,DataArray,DataSize):
         """Load varables into class
         example:
@@ -163,12 +242,45 @@ class GRDECL_Parser:
         Date: Sep. 2018
         """
         if(Keyword in SupportKeyWords):#KeyWords Check
-            assert len(DataArray)==DataSize,'\n     [Error] Incompatible data size!'
+            assert len(DataArray)==DataSize,'\n     [Error-%s] Incompatible data size! %d-%d' %(Keyword,len(DataArray),DataSize)
             KeywordID=SupportKeyWords.index(Keyword)
             print('     [%s] '%(Keyword),end='')
             self.SpatialDatas[Keyword]=np.array(DataArray,dtype=KeyWordsDatatypes[KeywordID])
         else:
-            print('\n     [Warnning] Unsupport keywords[%s]' % (Keyword))
+            if(self.SkipedKeywords==0):print()
+            print('     [Warnning] Unsupport keywords[%s]' % (Keyword))
+            self.SkipedKeywords+=1
+
+    def parseDataArray(self,DataArray):
+        """Parse special dataArray format in GRDECL 
+        example:
+            5*3.0=[3.0 3.0 3.0 3.0 3.0]
+            1.0 2*3.0 5.0=[1.0 3.0 3.0 5.0]
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Sep. 2018
+        """
+
+        data=[]
+        error_count=0
+        for value in DataArray:
+            if(is_number(value)==2):
+                num,val=value.split('*')
+                for i in range(int(num)): data.append(val)
+            elif(is_number(value)==1):
+                data.append(value)
+            else:
+                error_count+=1
+        
+        if(error_count>0):
+            print(DataArray)
+        
+        assert error_count==0, '[Error] Can not find any numeric value!'
+        
+        
+
+        return data
+
 
     def read_IncludeFile(self,filename_include,NumData):
         """Read Include data file
@@ -528,6 +640,14 @@ def RemoveCommentLines(data,commenter='--'):
         newdata.append(line)
     return '\n'.join(newdata)
 
+def scanKeyword(data):
+    #scan and find the keyword
+    #e.g. ['INIT','DX','2500*30.0'] -> ['DX','2500*30.0']
+    for key in SupportKeyWords:
+        if (key in data) and (data.find(key)!=0):
+            return data[data.find(key):-1]
+    return data
+
 def is_number(s):
     #Determine a string is a number or not
     #Used in [read_GRDECL] [getBlkdata]
@@ -544,7 +664,7 @@ def is_number(s):
     except (TypeError, ValueError):
         pass
     
-    try:
+    try: #Special format N*val= [val val val ....]
         num, val = s.split('*')
         return 2
     except ValueError:
