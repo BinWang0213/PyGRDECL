@@ -21,7 +21,8 @@ SupportKeyWords=[
     'PORO',
     'PERMX' , 'PERMXY', 'PERMXZ', 
     'PERMYX', 'PERMY' , 'PERMYZ', 
-    'PERMZX', 'PERMZY', 'PERMZ'
+    'PERMZX', 'PERMZY', 'PERMZ',
+    'SW_NPSL'
 ]
 
 KeyWordsDatatypes=[#Corrsponding data types

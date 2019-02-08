@@ -157,9 +157,10 @@ class GeologyModel:
         
         print("     NumOfPoints",self.VTK_Grids.GetNumberOfPoints())
         print("     NumOfCells",self.VTK_Grids.GetNumberOfCells())
-        #3. Load grid properties data if applicable
+        
+        #3. Load all grid properties data in SpatialDatas
         for keyword,data in self.GRDECL_Data.SpatialDatas.items():
-            self.AppendScalarData(keyword,data)
+            self.AppendScalarData2VTK(keyword,data)
 
         print('     .....Done!')
     
@@ -200,7 +201,7 @@ class GeologyModel:
             DomainMarker2D = np.where(flag == 0, DomainMarker2D, flag)
         
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
-        self.AppendScalarData('SubVolumeIDs',DomainMarker3D)
+        self.AppendScalarData2VTK('SubVolumeIDs',DomainMarker3D)
 
         DomainMarker2D=np.zeros(self.GRDECL_Data.NY*self.GRDECL_Data.NX)
         RandomColor=10*np.random.rand(len(self.FaultProcessor.SplitPolygons))
@@ -212,17 +213,28 @@ class GeologyModel:
             DomainMarker2D = np.where(flag == 0, DomainMarker2D, flag)
         
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
-        self.AppendScalarData('SubVolumes',DomainMarker3D)
-
-    def AppendScalarData(self,name,numpy_array):
-        #* Append scalar cell data (numpy array) into vtk object 
-        data = ns.numpy_to_vtk(numpy_array.ravel(order='F'),deep=True, array_type=vtk.VTK_FLOAT)
-        data.SetName(str(name))
-        data.SetNumberOfComponents(1)
-        self.VTK_Grids.GetCellData().AddArray(data)
+        self.AppendScalarData2VTK('SubVolumes',DomainMarker3D)
     
-    def UpdateCellData(self,varname,val=100,var="PERMX",nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1)):
-        """Update/modify Permeability/Porosity field with given grid block range
+
+    def CreateCellData(self,varname="SW",val=0.0,val_array=[]):
+        """Create a new data field 
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+        """
+        assert varname not in self.GRDECL_Data.SpatialDatas, "     [Error] Variable [%s] is existed! Please use UpdateCellData function" %(varname)
+
+        if(len(val_array)==0):
+            self.GRDECL_Data.SpatialDatas[varname]=np.ones(self.GRDECL_Data.N)*val
+            print('     New variable [%s] created with a value of %lf!'%(varname,val))
+        else:
+            assert len(val_array)==self.GRDECL_Data.N, print('     [Error] Input array is not compatible with number of cells!')
+            self.GRDECL_Data.SpatialDatas[varname]=np.array(val_array)
+            print('     New variable [%s] created with a given array!'%(varname,val))
+
+
+    def UpdateCellData(self,varname="PERMX",val=100.0,nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1)):
+        """Update/modify Cell data field (Permeability/Porosity) with given grid block range
         
         Arguments
         ---------
@@ -236,7 +248,8 @@ class GeologyModel:
         Date: Feb. 2018
         """
 
-        assert varname in self.GRDECL_Data.SpatialDatas, "[Error] Variable [%s] is not existed!"
+        if (varname not in self.GRDECL_Data.SpatialDatas): #New cell data
+            print("[Warnning] Variable [%s] is not existed!")
 
         nx_range=np.array(nx_range) 
         ny_range=np.array(ny_range)
@@ -296,6 +309,14 @@ class GeologyModel:
         
         for name in fnames:
             print('NPSL file [%s] successfully genetrated, pelase use NPSL to load it!' % (name))
+        
+        #Output special NPSL init sw field 
+        if('SW_NPSL' in self.GRDECL_Data.SpatialDatas):
+            fnames.append(os.path.join('Results',basename + '_sw.txt'))
+            header='#CheckPoint_Data\nTIMESTEP 1\nCELL_DATA 3600\nNUMBER_OF_SPECIES 1\n\nSCALARS C_PseudoOil float'
+            np.savetxt(fnames[-1],  self.GRDECL_Data.SpatialDatas['SW_NPSL'], delimiter="\n",fmt='%1.4f',header=header,comments="")
+            print('NPSL file [%s] successfully genetrated, pelase use NPSL to load it!' % (fnames[-1]))
+
 
 
     def Write2VTU(self):
@@ -311,6 +332,13 @@ class GeologyModel:
         xmlWriter.Write()
         print('Done!')
 
+
+    def AppendScalarData2VTK(self,name,numpy_array):
+        #* Append scalar cell data (numpy array) into vtk object, should not directly called by user
+        data = ns.numpy_to_vtk(numpy_array.ravel(order='F'),deep=True, array_type=vtk.VTK_FLOAT)
+        data.SetName(str(name))
+        data.SetNumberOfComponents(1)
+        self.VTK_Grids.GetCellData().AddArray(data)
 
                         
 
