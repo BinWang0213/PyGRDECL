@@ -1,7 +1,6 @@
 PyGRDECL: A Python-based GRDECL Visulization Library
 ==============================================================================================
-Bin Wang (binwang.0213@gmail.com), Yin Feng
-Department of Petroleum Engineering, Univeristy of Louisiana at Lafayette, Lafayette, US, 70506
+Bin Wang (binwang.0213@gmail.com), Craft and Hawkins Department of Petroleum Engineering, Louisiana State University, Baton Rouge, US
 
 <p align="center">
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/GridPreview.png" height="300">
