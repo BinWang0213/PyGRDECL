@@ -232,6 +232,20 @@ class GeologyModel:
             self.GRDECL_Data.SpatialDatas[varname]=np.array(val_array)
             print('     New variable [%s] created with a given array!'%(varname,val))
 
+    def LoadCellData(self,varname="SW",filename="123.txt"):
+        """Create a new data field and load from a file
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+        """
+        Data=KeyWordReader(filename,varname)
+        if(Data is not None):
+            assert len(Data)==self.GRDECL_Data.N, print('     [Error] Input array is not compatible with number of cells!')
+            self.GRDECL_Data.SpatialDatas[varname]=Data
+            print('     New variable [%s] loaded from file!'%(varname))
+        
+        return Data
+
 
     def UpdateCellData(self,varname="PERMX",val=100.0,nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1),array=[]):
         """Update/modify Cell data field (Permeability/Porosity) with given grid block range

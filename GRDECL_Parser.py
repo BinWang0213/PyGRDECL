@@ -629,6 +629,34 @@ class GRDECL_Parser:
 #
 #############################################
 
+def KeyWordReader(fname,varname, datatype=float):
+    #Simple reader to read a file with a input keyword name
+
+    f=open(fname)
+    print('[Input] Reading ECLIPSE/PETREL file \"%s\" ....'%(fname))
+    contents=f.read()
+    f.close()
+
+    contents=RemoveCommentLines(contents,commenter='--')
+    contents_in_block=contents.strip().split('/') #Sepeart input file by slash /
+    contents_in_block = [x for x in contents_in_block if x]#Remove empty block at the end
+    NumKeywords=len(contents_in_block)
+
+    for i,block in enumerate(contents_in_block):#Keyword, Block-wise
+        #Clean the data where no spliter \ provided
+        block=scanKeyword(block)
+
+        blockData_raw=block.strip().split()
+        Keyword,DataArray=blockData_raw[0],blockData_raw[1:]
+
+        if(Keyword==varname):
+            print("     Reading Keywords [%s] " %(Keyword))
+            return np.array(DataArray,dtype=datatype)
+
+    print('     [Warnning] Can not keywords on file[%s]',varname)
+
+    return None
+
 
 def RemoveCommentLines(data,commenter='--'):
     #Remove comment and empty lines
