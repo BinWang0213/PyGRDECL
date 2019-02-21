@@ -18,13 +18,13 @@ After downloading and unzipping the current <a href="https://github.com/BinWang0
 
 Following install script can be used for creating a seperate virtual env
 ```python
-//Windows
+#Windows
 conda create -n pyGRDECL
 activate pyGRDECL
 conda install pandas numpy matplotlib jupyter notebook scipy 
 conda install shapely vtk
 
-//Linux
+#Linux
 conda create -n pyGRDECL
 source activate pyGRDECL
 conda install pandas numpy matplotlib jupyter notebook scipy 
