@@ -233,7 +233,7 @@ class GeologyModel:
             print('     New variable [%s] created with a given array!'%(varname,val))
 
 
-    def UpdateCellData(self,varname="PERMX",val=100.0,nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1)):
+    def UpdateCellData(self,varname="PERMX",val=100.0,nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1),array=[]):
         """Update/modify Cell data field (Permeability/Porosity) with given grid block range
         
         Arguments
@@ -276,6 +276,9 @@ class GeologyModel:
                         if(j>=ny_range[0] and j<=ny_range[1]):
                             if(k>=nz_range[0] and k<=nz_range[1]):
                                 ijk = getIJK(i, j, k, self.GRDECL_Data.NX, self.GRDECL_Data.NY, self.GRDECL_Data.NZ)
+                                
+                                if(len(array)>0):#We load up value from a 1D array which storaged in the following loop order
+                                    val=array[ijk]
                                 self.GRDECL_Data.SpatialDatas[varname][ijk]=val
 
     

@@ -72,3 +72,71 @@ def Cartesian2UnstructGrid(DX,DY,DZ,TOPS,NX,NY,NZ):
 
     return coordX,coordY,coordZ
 
+#Create random permeability field
+def logNormLayers(gridDims,AvgLayerPerm,poro_const=0.05):
+    import scipy.ndimage as ndimage
+    import matplotlib.pyplot as plt
+    
+    assert len(AvgLayerPerm)==gridDims[2], "[Error] AvgLayerPerm size is not equal to model layers!\n"
+    
+    NumLayers=gridDims[2]
+    K=[]
+    for li in range(NumLayers):
+        #Genetrate random field using gaussian smmoth, see logNormLayers.M in MRST
+        raw_data = np.random.randn(gridDims[0],gridDims[1])
+        raw_data -= 0.05*np.random.randn(1)[0]
+        k = ndimage.gaussian_filter(raw_data, 3.5)
+        k=np.exp( 2 + 2*k)
+        
+        K.append(AvgLayerPerm[li]*k/np.mean(k))
+        print("Layer%d Perm Avg=%lf min=%lf max=%lf" %(li+1,np.average(K[li]),np.min(K[li]),np.max(K[li])))
+    
+    #Plot the permeability
+    NumRows=int(NumLayers/3)+1
+    fig, axs = plt.subplots(NumRows,3, figsize=(4*3, NumRows*3), facecolor='w', edgecolor='k')
+    #fig.subplots_adjust(hspace = .01, wspace=.001)
+
+    axs = axs.ravel()
+    for li in range(NumLayers):
+        logperm=np.log10(K[li])
+        #logperm=K[li]
+        im=axs[li].imshow(logperm, interpolation='nearest',origin='lower',cmap='jet',
+                          #vmin=np.min(K),vmax=np.max(K))
+                          vmin=np.min(np.log10(K)),vmax=np.max(np.log10(K)))
+        axs[li].set(title='Random Log(perm) Layer%d'%(li+1), xticks=[], yticks=[])
+
+    for ax in axs:
+        ax.set(xticks=[], yticks=[])
+
+    
+    #fig.tight_layout()
+    cbar = fig.colorbar(im, ax=axs.ravel().tolist(), shrink=0.95)
+    plt.show()
+    
+    #Genetrate random porosity field using phi=0.25*K^0.11
+    phi=[]
+    for li in range(NumLayers):
+        phi.append(poro_const*np.log(K[li]))
+        print("Layer%d Poro Avg=%lf min=%lf max=%lf" %(li+1,np.average(phi[li]),np.min(phi[li]),np.max(phi[li])))
+
+    #Plot the Porosity
+    #NumRows=max([int(NumLayers/3),1])
+    fig, axs = plt.subplots(NumRows,3, figsize=(4*3, NumRows*3), facecolor='w', edgecolor='k')
+    #fig.subplots_adjust(hspace = .01, wspace=.001)
+
+    axs = axs.ravel()
+    for li in range(NumLayers):
+        im=axs[li].imshow(phi[li], interpolation='nearest',origin='lower',cmap='jet',
+                          vmin=np.min(phi),vmax=np.max(phi))
+        axs[li].set(title='Random Porosity Layer%d'%(li+1), xticks=[], yticks=[])
+    
+    for ax in axs:
+        ax.set(xticks=[], yticks=[])
+    
+    
+    #fig.tight_layout()
+    cbar = fig.colorbar(im, ax=axs.ravel().tolist(), shrink=0.95)
+    plt.show()
+    
+    #Flatten K and phi into x,y,z GRDECL convention order
+    return np.array([i for k in K for i in k.flatten()]),np.array([i for fi in phi for i in fi.flatten()])
