@@ -6,7 +6,7 @@ Bin Wang (binwang.0213@gmail.com), Craft and Hawkins Department of Petroleum Eng
   <img src = "https://github.com/BinWang0213/PyGRDECL/blob/master/img/GridPreview.png" height="300">
 </p>
 
-`PyGRDECL` is a light-weight open source library for converting a Eclipse grid with properties to a vtu-file.
+`PyGRDECL` is a light-weight open source library for converting a Eclipse/Petrel grid with properties to a vtu-file.
 (to be opened in ParaView for example). 
 
 ## Install & Usage
