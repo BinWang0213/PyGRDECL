@@ -158,11 +158,15 @@ class GeologyModel:
         print("     NumOfPoints",self.VTK_Grids.GetNumberOfPoints())
         print("     NumOfCells",self.VTK_Grids.GetNumberOfCells())
         
-        #3. Load all grid properties data in SpatialDatas
-        for keyword,data in self.GRDECL_Data.SpatialDatas.items():
-            self.AppendScalarData2VTK(keyword,data)
+        self.Update()
 
         print('     .....Done!')
+    
+    def Update(self):
+        #Load all available keywords/cellarrays into VTK container        
+        for keyword,data in self.GRDECL_Data.SpatialDatas.items():
+            self.AppendScalarData2VTK(keyword,data) #VTK will automatically overwrite the data with the same keyword
+
     
     def decomposeModel(self):
         '''#* Identify and extract boundary/falut faces

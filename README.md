@@ -36,6 +36,14 @@ Model.decomposeModel()
 
 #Output to VTK format
 Model.Write2VTU()
+
+#Load a custom new keyword from file
+TempData=Model.LoadCellData(varname="TEMP",filename='./ExampleData/dome_Temperature.txt')
+
+#Update model and output to VTK format
+Model.Update()
+Model.Write2VTU()
+
 ```
 
 
