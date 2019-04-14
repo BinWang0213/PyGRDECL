@@ -65,5 +65,5 @@ Model.Write2VTU()
 
 This code is released under the terms of the BSD license, and thus free for commercial and research use. Feel free to use the code into your own project with a PROPER REFERENCE.  
 
-[Citation] B. Wang, PyGRDECL A Python-based GRDECL Visualization Library, (2018), GitHub repository, https://github.com/BinWang0213/PyGRDECL
+B. Wang, PyGRDECL A Python-based GRDECL Visualization Library, (2018), GitHub repository, https://github.com/BinWang0213/PyGRDECL
 
