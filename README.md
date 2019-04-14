@@ -1,4 +1,4 @@
-PyGRDECL: A Python-based GRDECL Visulization Library
+PyGRDECL: A Python-based GRDECL Visualization Library
 ==============================================================================================
 Bin Wang (binwang.0213@gmail.com), Craft and Hawkins Department of Petroleum Engineering, Louisiana State University, Baton Rouge, US
 
@@ -63,4 +63,7 @@ Model.Write2VTU()
 
 # License
 
+B. Wang, PyGRDECL A Python-based GRDECL Visualization Library, (2018), GitHub repository, https://github.com/BinWang0213/PyGRDECL
+
 This code is released under the terms of the BSD license, and thus free for commercial and research use. Feel free to use the code into your own project with a PROPER REFERENCE.  
+
