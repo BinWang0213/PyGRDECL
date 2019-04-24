@@ -14,6 +14,7 @@
 import operator
 import collections
 import numpy as np
+import warnings
 
 #Find intersection of lines
 #https://github.com/ideasman42/isect_segments-bentley_ottmann
