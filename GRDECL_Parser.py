@@ -149,7 +149,7 @@ class GRDECL_Parser:
                 continue
 
             if(Keyword in SupportKeyWords): #We need parse the special format in 
-                DataArray=self.parseDataArray(DataArray)
+                DataArray=parseDataArray(DataArray)
                 #print(Keyword,DataArray)
             
 
@@ -251,36 +251,6 @@ class GRDECL_Parser:
             if(self.SkipedKeywords==0):print()
             print('     [Warnning] Unsupport keywords[%s]' % (Keyword))
             self.SkipedKeywords+=1
-
-    def parseDataArray(self,DataArray):
-        """Parse special dataArray format in GRDECL 
-        example:
-            5*3.0=[3.0 3.0 3.0 3.0 3.0]
-            1.0 2*3.0 5.0=[1.0 3.0 3.0 5.0]
-        
-        Author:Bin Wang(binwang.0213@gmail.com)
-        Date: Sep. 2018
-        """
-
-        data=[]
-        error_count=0
-        for value in DataArray:
-            if(is_number(value)==2):
-                num,val=value.split('*')
-                for i in range(int(num)): data.append(val)
-            elif(is_number(value)==1):
-                data.append(value)
-            else:
-                error_count+=1
-        
-        if(error_count>0):
-            print(DataArray)
-        
-        assert error_count==0, '[Error] Can not find any numeric value!'
-        
-        
-
-        return data
 
 
     def read_IncludeFile(self,filename_include,NumData):
@@ -629,6 +599,36 @@ class GRDECL_Parser:
 #
 #############################################
 
+def parseDataArray(DataArray):
+        """Parse special dataArray format in GRDECL 
+        example:
+            5*3.0=[3.0 3.0 3.0 3.0 3.0]
+            1.0 2*3.0 5.0=[1.0 3.0 3.0 5.0]
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Sep. 2018
+        """
+
+        data=[]
+        error_count=0
+        for value in DataArray:
+            if(is_number(value)==2):
+                num,val=value.split('*')
+                for i in range(int(num)): data.append(val)
+            elif(is_number(value)==1):
+                data.append(value)
+            else:
+                error_count+=1
+        
+        if(error_count>0):
+            print(DataArray)
+        
+        assert error_count==0, '[Error] Can not find any numeric value!'
+        
+        
+
+        return data
+
 def KeyWordReader(fname,varname, datatype=float):
     #Simple reader to read a file with a input keyword name
 
@@ -651,9 +651,10 @@ def KeyWordReader(fname,varname, datatype=float):
 
         if(Keyword==varname):
             print("     Reading Keywords [%s] " %(Keyword))
+            DataArray=parseDataArray(DataArray)
             return np.array(DataArray,dtype=datatype)
 
-    print('     [Warnning] Can not keywords on file[%s]',varname)
+    print('     [Warnning] Can not find keywords on file[%s]',varname)
 
     return None
 
