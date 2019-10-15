@@ -1,5 +1,5 @@
 #########################################################################
-#       (C) 2017 Department of Petroleum Engineering,                   # 
+#       (C) 2017 Department of Petroleum Engineering,                   #
 #       Univeristy of Louisiana at Lafayette, Lafayette, US.            #
 #                                                                       #
 # This code is released under the terms of the BSD license, and thus    #
@@ -7,8 +7,8 @@
 # your own project with a PROPER REFERENCE.                             #
 #                                                                       #
 # PyGRDECL Code                                                         #
-# Author: Bin Wang                                                      # 
-# Email: binwang.0213@gmail.com                                         # 
+# Author: Bin Wang                                                      #
+# Email: binwang.0213@gmail.com                                         #
 #########################################################################
 
 import numpy as np
@@ -37,9 +37,9 @@ from utils import *
 
 class GeologyModel:
     def __init__(self,filename=''):
-        """Eclipse Input file(GRDECL) Visulazation and Analysis  
+        """Eclipse Input file(GRDECL) Visulazation and Analysis
         Keywords Reference: file format:http://petrofaq.org/wiki/Eclipse_Input_Data
-        
+
         Arguments
         ---------
         NX, NY, NZ         -- Grid dimension.
@@ -66,14 +66,14 @@ class GeologyModel:
         self.GRDECL_Data.read_GRDECL()
 
     def buildCartGrid(self,physDims=[100.0,100.0,10.0],gridDims=[10,10,1]):
-        #* Create simple cartesian grid 
+        #* Create simple cartesian grid
         self.GRDECL_Data.buildCartGrid(physDims,gridDims)
 
     def GRDECL2VTK(self):
         #* Convert corner point grid/cartesian grid into VTK unstructure grid
         print('[Geometry] Converting GRDECL to Paraview Hexahedron mesh data....')
         NX,NY,NZ=self.GRDECL_Data.NX,self.GRDECL_Data.NY,self.GRDECL_Data.NZ
-        
+
         if(self.GRDECL_Data.GRID_type=='Cartesian'):
             #1. Collect points from Cartesian data
             debug=0
@@ -112,17 +112,17 @@ class GeologyModel:
                             Cell.GetPointIds().SetId(pi,idx_GB[pi])
                         cellArray.InsertNextCell(Cell)
                         cellid+=1
-            
+
             self.VTK_Grids.SetCells(Cell.GetCellType(), cellArray)
 
 
         if(self.GRDECL_Data.GRID_type=='CornerPoint'):
-            
+
             #1.Collect Points from the raw CornerPoint data [ZCORN]&[COORD]
             #X,Y has to be interpolated from [ZCORN]
             Points = vtk.vtkPoints()
             Points.SetNumberOfPoints(len(self.GRDECL_Data.ZCORN)) #=2*NX*2*NY*2*NZ
-            
+
             ptsid=0
             for k in range(NZ):
                 for j in range(NY):
@@ -132,7 +132,7 @@ class GeologyModel:
                             Points.SetPoint(ptsid,CellCoords[pi])
                             ptsid+=1
             self.VTK_Grids.SetPoints(Points)
-            
+
             #2. Recover Cells which follows the convention of [ZCORN]
             cellArray = vtk.vtkCellArray()
             Cell=vtk.vtkHexahedron()
@@ -146,31 +146,31 @@ class GeologyModel:
                             #https://www.vtk.org/wp-content/uploads/2015/04/file-formats.pdf
                             #0,1,2,3(GRDECL)->0,1,3,2(VTK,anti-clockwise)
                             if(pi==2 or pi==6): VTKid=pi+1
-                            elif(pi==3 or pi==7): VTKid=pi-1 
+                            elif(pi==3 or pi==7): VTKid=pi-1
                             else: VTKid=pi
                             Cell.GetPointIds().SetId(pi,cellid*8+VTKid)
                         cellArray.InsertNextCell(Cell)
                         cellid+=1
-            
+
             self.VTK_Grids.SetCells(Cell.GetCellType(), cellArray)
 
-        
+
         print("     NumOfPoints",self.VTK_Grids.GetNumberOfPoints())
         print("     NumOfCells",self.VTK_Grids.GetNumberOfCells())
-        
+
         self.Update()
 
         print('     .....Done!')
-    
+
     def Update(self):
-        #Load all available keywords/cellarrays into VTK container        
+        #Load all available keywords/cellarrays into VTK container
         for keyword,data in self.GRDECL_Data.SpatialDatas.items():
             self.AppendScalarData2VTK(keyword,data) #VTK will automatically overwrite the data with the same keyword
 
-    
+
     def decomposeModel(self):
         '''#* Identify and extract boundary/falut faces
-        
+
         Fault-based model decomposition,subdividing the geology model along fault face
         **Currently, fault only happens on X,Y plane. No fault in Z direction
 
@@ -179,7 +179,7 @@ class GeologyModel:
         4----5
           2----3
          -    -  <-Top Face
-        0----1         
+        0----1
 
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Sep. 2018
@@ -200,10 +200,10 @@ class GeologyModel:
         for i,poly in enumerate(self.FaultProcessor.SplitPolygons):
             #print(len(poly),poly)
             #mark the (i,j) as value of [flag] if cell center is in polygon
-            flag=points_in_polygon(CellCenter,poly,flag=i+1) 
+            flag=points_in_polygon(CellCenter,poly,flag=i+1)
             #https://stackoverflow.com/questions/31862704/numpy-combine-all-nonzero-elements-of-one-array-in-to-another
             DomainMarker2D = np.where(flag == 0, DomainMarker2D, flag)
-        
+
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
         self.AppendScalarData2VTK('SubVolumeIDs',DomainMarker3D)
 
@@ -212,17 +212,17 @@ class GeologyModel:
         for i,poly in enumerate(self.FaultProcessor.SplitPolygons):
             #print(len(poly),poly)
             #mark the (i,j) as value of [flag] if cell center is in polygon
-            flag=points_in_polygon(CellCenter,poly,flag=RandomColor[i]) 
+            flag=points_in_polygon(CellCenter,poly,flag=RandomColor[i])
             #https://stackoverflow.com/questions/31862704/numpy-combine-all-nonzero-elements-of-one-array-in-to-another
             DomainMarker2D = np.where(flag == 0, DomainMarker2D, flag)
-        
+
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
         self.AppendScalarData2VTK('SubVolumes',DomainMarker3D)
-    
+
 
     def CreateCellData(self,varname="SW",val=0.0,val_array=[]):
-        """Create a new data field 
-        
+        """Create a new data field
+
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Feb. 2018
         """
@@ -238,7 +238,7 @@ class GeologyModel:
 
     def LoadCellData(self,varname="SW",filename="123.txt"):
         """Create a new data field and load from a file
-        
+
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Feb. 2018
         """
@@ -247,13 +247,13 @@ class GeologyModel:
             assert len(Data)==self.GRDECL_Data.N, print('     [Error] Input array is not compatible with number of cells!')
             self.GRDECL_Data.SpatialDatas[varname]=Data
             print('     New variable [%s] loaded from file!'%(varname))
-        
+
         return Data
 
 
     def UpdateCellData(self,varname="PERMX",val=100.0,nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1),array=[]):
         """Update/modify Cell data field (Permeability/Porosity) with given grid block range
-        
+
         Arguments
         ---------
         var         -- The varable name you want to update, e.g PERMX, PERMY or PERMZ
@@ -261,7 +261,7 @@ class GeologyModel:
         nx_range    -- The specifc grid range in x for updating, 1-based index
         nx_range    -- The specifc grid range in y for updating, 1-based index
         nz_range    -- The specifc grid range in z for updating, 1-based index
-        
+
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Feb. 2018
         """
@@ -269,11 +269,11 @@ class GeologyModel:
         if (varname not in self.GRDECL_Data.SpatialDatas): #New cell data
             print("[Warnning] Variable [%s] is not existed!")
 
-        nx_range=np.array(nx_range) 
+        nx_range=np.array(nx_range)
         ny_range=np.array(ny_range)
         nz_range=np.array(nz_range)
 
-        #If no nx,ny,nz range are defined, all perm will be updated       
+        #If no nx,ny,nz range are defined, all perm will be updated
         if(nx_range[1] == -1):
             nx_range[1] = self.GRDECL_Data.NX
         if(ny_range[1] == -1):
@@ -294,12 +294,12 @@ class GeologyModel:
                         if(j>=ny_range[0] and j<=ny_range[1]):
                             if(k>=nz_range[0] and k<=nz_range[1]):
                                 ijk = getIJK(i, j, k, self.GRDECL_Data.NX, self.GRDECL_Data.NY, self.GRDECL_Data.NZ)
-                                
+
                                 if(len(array)>0):#We load up value from a 1D array which storaged in the following loop order
                                     val=array[ijk]
                                 self.GRDECL_Data.SpatialDatas[varname][ijk]=val
 
-    
+
     def WriteNPSL(self):
         """Write the permeability/porosity field for NPSL
 
@@ -310,7 +310,7 @@ class GeologyModel:
 
             Arguments
             ---------
-            filename    -- The surname of permeability and porosity data files 
+            filename    -- The surname of permeability and porosity data files
 
             Programmer: Bin Wang (yin.feng@louisiana.edu)
             Creation:   Feb, 2018
@@ -327,11 +327,11 @@ class GeologyModel:
         np.savetxt(fnames[1], self.GRDECL_Data.SpatialDatas['PERMY'], delimiter="\n",fmt='%1.4f')
         np.savetxt(fnames[2], self.GRDECL_Data.SpatialDatas['PERMZ'], delimiter="\n",fmt='%1.4f')
         np.savetxt(fnames[3],  self.GRDECL_Data.SpatialDatas['PORO'], delimiter="\n",fmt='%1.4f')
-        
+
         for name in fnames:
             print('NPSL file [%s] successfully genetrated, pelase use NPSL to load it!' % (name))
-        
-        #Output special NPSL init sw field 
+
+        #Output special NPSL init sw field
         if('SW_NPSL' in self.GRDECL_Data.SpatialDatas):
             fnames.append(os.path.join('Results',basename + '_sw.txt'))
             header='#CheckPoint_Data\nTIMESTEP 1\nCELL_DATA 3600\nNUMBER_OF_SPECIES 1\n\nSCALARS C_PseudoOil float'
@@ -353,6 +353,28 @@ class GeologyModel:
         xmlWriter.Write()
         print('Done!')
 
+    def Write2VTP(self):
+        self.Write2VTU()
+        basename=os.path.splitext(os.path.basename(self.fname))[0]
+        inputFile=os.path.join('Results',basename + '.vtu')
+        outFile=os.path.join('Results',basename + '.vtp')
+        print('[Output] Writing "%s" VTP file..'%(outFile),end='')
+        reader = vtk.vtkXMLUnstructuredGridReader()
+        reader.SetFileName(inputFile)
+        reader.Update()
+        ugrid = reader.GetOutput()
+        geometryFilter = vtk.vtkGeometryFilter()
+        geometryFilter.SetInputData(ugrid)
+        geometryFilter.Update()
+        polydata = geometryFilter.GetOutput()
+        writer =vtk.vtkXMLPolyDataWriter()
+        writer.SetFileName(outFile)
+        writer.SetInputData(polydata)
+        writer.Write()
+        print("vtp file created.")
+
+
+
 
     def AppendScalarData2VTK(self,name,numpy_array):
         #* Append scalar cell data (numpy array) into vtk object, should not directly called by user
@@ -361,8 +383,7 @@ class GeologyModel:
         data.SetNumberOfComponents(1)
         self.VTK_Grids.GetCellData().AddArray(data)
 
-                        
 
 
 
-    
+
