@@ -11,6 +11,7 @@
 # Email: binwang.0213@gmail.com                                         # 
 #########################################################################
 
+import os
 import numpy as np
 
 SupportKeyWords=[
@@ -149,8 +150,11 @@ class GRDECL_Parser:
                 continue
 
             if(Keyword in SupportKeyWords): #We need parse the special format in 
-                DataArray=parseDataArray(DataArray)
+                if(len(DataArray)==1 and '.' in DataArray[0]):
+                    folder_name=os.path.dirname(self.fname)
+                    DataArray=self.read_IncludeFile(os.path.join(folder_name,DataArray[0]),self.N)
                 #print(Keyword,DataArray)
+                DataArray=parseDataArray(DataArray)
             
 
             #Read Grid spatial information, x,y,z ordering
@@ -269,6 +273,84 @@ class GRDECL_Parser:
         if(len(block_dataset)!=NumData):
             print('Data size %s is not equal to defined block dimension (NX*NY*NZ) %s'%(len(block_dataset),NumData))
         return block_dataset
+
+    
+    def field_cutter(self,nx_range=(0,-1),ny_range=(0,-1),nz_range=(0,-1)):
+        """Extract the subset of a domain
+        
+        Arguments
+        ---------
+        nx_range    -- The specifc grid range in x for the subset 
+        nx_range    -- The specifc grid range in y for the subset 
+        nz_range    -- The specifc grid range in z for the subset 
+        
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+
+        Author:Bin Wang(binwang.0213@gmail.com)
+        Date: Feb. 2018
+        """
+
+        #If no nx,ny,nz range are defined, all perm will be updated       
+        if(nx_range[1]==-1):
+            nx_range[1] = self.NX
+        if(ny_range[1] == -1):
+            ny_range[1] = self.NY
+        if(nz_range[1]==-1):
+            nz_range[1] = self.NZ
+
+        NX_new=nx_range[1]
+        NY_new=ny_range[1]
+        NZ_new=nz_range[1]
+        N_new=NX_new*NY_new*NZ_new
+
+        TOPS_new=np.zeros(N_new)
+        DX_new=np.zeros(N_new)
+        DY_new=np.zeros(N_new)
+        DZ_new=np.zeros(N_new)
+
+        PERMX_new=np.zeros(N_new)
+        PERMY_new=np.zeros(N_new)
+        PERMZ_new=np.zeros(N_new)
+        PORO_new=np.zeros(N_new)
+
+        ijk_new=0
+        for k in range(self.NZ):
+            for j in range(self.NY):
+                for i in range(self.NX):
+                    if(i>=nx_range[0] and i<=nx_range[1]):
+                        if(j>=ny_range[0] and j<=ny_range[1]):
+                            if(k>=nz_range[0] and k<=nz_range[1]):
+                                ijk = getIJK(i, j, k, self.NX, self.NY, self.NZ)
+                                DX_new[ijk_new]=self.DX[ijk]
+                                DY_new[ijk_new]=self.DY[ijk]
+                                DZ_new[ijk_new]=self.DZ[ijk]
+                                TOPS_new[ijk_new]=self.TOPS[ijk]
+
+                                PERMX_new[ijk_new]=self.SpatialDatas["PERMX"][ijk]
+                                PERMY_new[ijk_new]=self.SpatialDatas["PERMY"][ijk]
+                                PERMZ_new[ijk_new]=self.SpatialDatas["PERMZ"][ijk]
+                                PORO_new[ijk_new]=self.SpatialDatas["PORO"][ijk]
+                                ijk_new=ijk_new+1
+        
+        NewGrid=GRDECL_Parser('',NX_new,NY_new,NZ_new)
+        NewGrid.GRID_type='Cartesian' #Currently only support CartGrid
+        NewGrid.DX=DX_new
+        NewGrid.DY=DY_new
+        NewGrid.DZ=DZ_new
+        NewGrid.TOPS=self.TOPS
+        NewGrid.SpatialDatas["PERMX"]=PERMX_new
+        NewGrid.SpatialDatas["PERMY"]=PERMY_new
+        NewGrid.SpatialDatas["PERMZ"]=PERMZ_new
+        NewGrid.SpatialDatas["PORO"]=PORO_new
+        NewGrid.print_info()
+        return NewGrid
+
+
+    def print_info(self):
+        print("     Grid Type=%s Grid" %(self.GRID_type))
+        print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)"%(self.NX,self.NY,self.NZ))
+        print("     NumOfGrids=%s"%(self.N))
 
     ######[DataInterperator]######
     def getPillar(self,Pid):

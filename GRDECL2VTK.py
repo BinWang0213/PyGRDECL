@@ -54,8 +54,7 @@ class GeologyModel:
         self.GRDECL_Data=GRDECL_Parser()
         self.FaultProcessor=None
 
-        self.VTK_Grids=vtk.vtkUnstructuredGrid()
-
+        self.VTK_Grids=None
 
         if(self.fname!=''):
             self.GRDECL_Data=GRDECL_Parser(self.fname)
@@ -73,6 +72,7 @@ class GeologyModel:
         #* Convert corner point grid/cartesian grid into VTK unstructure grid
         print('[Geometry] Converting GRDECL to Paraview Hexahedron mesh data....')
         NX,NY,NZ=self.GRDECL_Data.NX,self.GRDECL_Data.NY,self.GRDECL_Data.NZ
+        self.VTK_Grids=vtk.vtkUnstructuredGrid()
 
         if(self.GRDECL_Data.GRID_type=='Cartesian'):
             #1. Collect points from Cartesian data
