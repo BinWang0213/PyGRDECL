@@ -9,6 +9,8 @@
 # PyGRDECL Code                                                         #
 # Author: Bin Wang                                                      #
 # Email: binwang.0213@gmail.com                                         #
+# Contributing Author: Mustapha Zakari (MZ)                             #
+# Email: mustapha.zakari@univ-lorraine.fr                               #
 #########################################################################
 
 import numpy as np
@@ -382,6 +384,106 @@ class GeologyModel:
         data.SetName(str(name))
         data.SetNumberOfComponents(1)
         self.VTK_Grids.GetCellData().AddArray(data)
+
+    #####################################################################
+    # MZ::GRDECL cartesian writer functions
+    # MZ::Write spatial data at a specified output format:
+    # MZ::Writes rows "linestring" at given (j,k) and varying i indices
+    #####################################################################
+    def writeCartGrid_forGRDECL(self,filename):
+        # MZ:: Dictionary keyword+data storing Grid attributes to be written
+        Grid=self.GRDECL_Data;
+        self.grid_Data = {
+            "TOPS":Grid.TOPS,
+            "DX": Grid.DX,"DY": Grid.DY,"DZ": Grid.DZ
+        }
+
+        # Output format for floats
+        floatformat = "%5.2f"
+
+        # Open file  filename path
+        self.fname=filename;
+        f = open(self.fname, 'w')
+        print('[Output] Writing "%s" GRDECL file..'%filename,end='')
+
+        # Write DIMENSIONS
+        f.write("GRID\n\n")
+        f.write("DIMENS\n")
+        f.write(str(Grid.NX)+" "+str(Grid.NY)+" "+str(Grid.NZ)+" /"+"\n")
+
+        # Write Grid&Spatial information using merged dictionaries,
+        for key,value in {**self.grid_Data, **self.GRDECL_Data.SpatialDatas}.items():
+            # print(" Writing %s"%key)
+            f.write("\n"+key)
+            write_grid_data_forGRDECL(f, Grid, value, floatformat)
+            f.write("\n")
+
+        # Close file
+        f.close()
+        print("...done")
+
+#####################################################################
+# MZ::GRDECL cartesian writer functions
+# MZ::Write spatial data at a specified output format:
+# MZ::Writes rows "linestring" at given (j,k) and varying i indices
+#####################################################################
+def write_grid_data_forGRDECL(f,Grid,data,data_format):
+    # Add space between scalar values
+    data_format=data_format+" "
+    for k in range(Grid.NZ):
+        for j in range(Grid.NY):
+            # Set local flat indices range for i in (0,NX-1)
+            i0 = 0 + (Grid.NX) * (j + k * (Grid.NY))
+            iend = Grid.NX - 1 + (Grid.NX) * (j + k * (Grid.NY))
+
+            # Write First Elt of linestring at new line
+            linestring="\n"+custom_format(data_format,data[i0])
+            # Append next ELts: from i0+1 to iend
+            for i in range(i0+1, iend+1):
+                linestring=linestring+ custom_format(data_format,data[i])
+
+            # Find duplicates and merge them in string "nbelt*Elt"
+            linestring=merge_duplicates_forGRDECL(linestring)
+
+            f.write("\n"+linestring)
+    f.write("/")
+
+# MZ::Change output format to "%d " for integer values
+def custom_format(data_format,data):
+    if (int(data)==data):
+        data_format= "%d "
+    return data_format % data
+
+# MZ::Find duplicates and merge them in string "nbelt*Elt"
+def merge_duplicates_forGRDECL(linestring):
+    # Create list of output row Elts from linestring
+    l = linestring.strip().split(' ')
+    listeSize = len(l)
+    # Create new string with merged duplicates
+    linestring2 = "";
+    # Count nb of read Elts and their nb of occurences
+    nreadelt = 0;    noccur = 0;
+    while nreadelt < listeSize:
+        Elt = l[nreadelt]
+        noccur = 1
+        # Set next index to be read
+        nreadelt = nreadelt + 1
+        # Read and count duplicates after Elt in the next Elts
+        while (nreadelt < listeSize):
+            nextElt = l[nreadelt]
+            if (nextElt == Elt):
+                noccur = noccur + 1
+                # Set next index to be read
+                nreadelt = nreadelt + 1
+            else:
+                break
+        # Merge duplicates using "*"
+        if (noccur > 1):
+            Elt = str(noccur) + "*" + Elt
+        # Append new Elt to linestring
+        linestring2 = linestring2 + Elt + " ";
+    return linestring2
+
 
 
 
