@@ -455,34 +455,14 @@ def custom_format(data_format,data):
     return data_format % data
 
 # MZ::Find duplicates and merge them in string "nbelt*Elt"
+from itertools import groupby
 def merge_duplicates_forGRDECL(linestring):
-    # Create list of output row Elts from linestring
-    l = linestring.strip().split(' ')
-    listeSize = len(l)
-    # Create new string with merged duplicates
-    linestring2 = "";
-    # Count nb of read Elts and their nb of occurences
-    nreadelt = 0;    noccur = 0;
-    while nreadelt < listeSize:
-        Elt = l[nreadelt]
-        noccur = 1
-        # Set next index to be read
-        nreadelt = nreadelt + 1
-        # Read and count duplicates after Elt in the next Elts
-        while (nreadelt < listeSize):
-            nextElt = l[nreadelt]
-            if (nextElt == Elt):
-                noccur = noccur + 1
-                # Set next index to be read
-                nreadelt = nreadelt + 1
-            else:
-                break
-        # Merge duplicates using "*"
-        if (noccur > 1):
-            Elt = str(noccur) + "*" + Elt
-        # Append new Elt to linestring
-        linestring2 = linestring2 + Elt + " ";
-    return linestring2
+    new_str = ""
+    for k, v in groupby(linestring.split()):
+        group = list(v)
+        if (len(group) > 1): new_str += str(len(group)) + "*"
+        new_str += group[0] + " "
+    return new_str
 
 
 
