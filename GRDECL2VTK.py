@@ -30,7 +30,7 @@ from GRDECL_Parser import *
 from GRDECL_FaultProcess import *
 #from GRDECL_CADExporter import *
 from utils import *
-
+from Permeability_Tools import *
 #############################################
 #
 #  Core Eclipse File Read/View/Analysis Class
