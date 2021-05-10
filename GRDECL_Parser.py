@@ -13,12 +13,12 @@
 
 import os
 import numpy as np
-
+import math
 SupportKeyWords=[
     'SPECGRID', #Dimenion of the corner point grid
     'DIMENS',   #Define the dimension of the cartesian grid
     'TOPS','DX','DY','DZ',
-    'COORD','ZCORN',
+    'COORD','ZCORN','ACTNUM'
     'PORO',
     'PERMX' , 'PERMXY', 'PERMXZ', 
     'PERMYX', 'PERMY' , 'PERMYZ', 
@@ -69,6 +69,7 @@ class GRDECL_Parser:
         #Corner point gridblock data KeyWrods (not support now)
         self.COORD=[]
         self.ZCORN=[] #http://maoxp9.blog.163.com/blog/static/122653420093894133671/
+        self.ACTNUM=[]
 
         #Petrophysics data Keywords
         self.SpatialDatas={}
@@ -237,6 +238,81 @@ class GRDECL_Parser:
         self.SpatialDatas["PERMY"]=np.ones(self.N)*10.0
         self.SpatialDatas["PERMZ"]=np.ones(self.N)*10.0
         self.SpatialDatas["PORO"]=np.ones(self.N)*0.3
+
+
+    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False}):
+        """Build simple corner point grid
+        Arguments
+        ---------
+        physDim  -- physical dimensions of system
+        gridDims -- grid dimension of system
+
+        Author:Mustapha Zakari(mustapha.zakari@univ-lorraine.fr)
+        Date: May. 2021
+        Python version based on a translation of MRST simpleGrdecl
+        """
+        self.NX, self.NY, self.NZ = gridDims
+        self.N = self.NX * self.NY * self.NZ
+        self.GRID_type = 'CornerPoint'
+
+        print("     Grid Type=%s Grid" % (self.GRID_type))
+        print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)" % (self.NX, self.NY, self.NZ))
+        print("     NumOfGrids=%s" % (self.N))
+
+        # opt.disturbed = True;
+        # opt.flat = False
+        # Create x,y,z vectors. Disturb x,z
+        x_= np.linspace(0, physDims[0], self.NX + 1)
+        y_= np.linspace(0, physDims[1], self.NY + 1)
+        z_= np.linspace(0, physDims[2], self.NZ + 1)
+        x, y, z = np.meshgrid(x_, y_, z_, indexing='ij')
+
+        if (opt['disturbed']):
+            x = x + 0.2 * (0.5 - abs(x - 0.5)) * (z - 0.5);
+        if (not opt['flat'] and opt['disturbed']):
+            def fz(x, y):
+                z = -0.05 * np.sin(math.pi * (x - 0.5)) - 0.075 * np.sin(math.pi * (y + 2 * x));
+                return z
+
+            for k in range(gridDims[2]+1):
+                xi = x[:, :, k] / physDims[0];
+                eta = y[:, :, k] / physDims[1];
+                z[:, :, k] = z[:, :, k] + fz(xi, eta);
+
+            z = np.sort(z, 2);
+
+        # Create pillars
+        ## nb of pillars (nx+1)*(ny+1)
+        npillar = np.prod(np.array(gridDims[0:2]) + 1)
+        ## Each pillar has bottom&top xyz COORD (6 coordinates)
+        lines = np.zeros((npillar, 6));
+        ## Set columns x y z min | x y z max
+        for i, V in enumerate([x, y, z]):
+            lines[:, i] = V[:, :, 0].reshape((npillar), order='F');
+            lines[:, i + 3] = V[:, :, -1].reshape((npillar), order='F');
+        self.COORD = lines.reshape((np.prod(lines.size)))
+
+        # Assign z-coordinates
+        # repeated indices in each direction: 0, 1, 1, 2, 2, ..., dims(d)-1, dims(d)-1, dims(d)
+        def repInd(d):
+            return (np.floor(np.linspace(1, 2 * gridDims[d], 2 * gridDims[d]) / 2)).astype(int)
+
+        IX, IY, IZ = repInd(0), repInd(1), repInd(2)
+        ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
+        for i in range(2 * self.NX):
+            for j in range(2 * self.NY):
+                for k in range(2 * self.NZ):
+                    ZCORN[i, j, k] = z[IX[i], IY[j], IZ[k]]
+
+        self.ZCORN = ZCORN.reshape((np.prod(ZCORN.size)), order='F')
+
+        self.ACTNUM = np.ones((self.NX * self.NY * self.NZ))
+
+        # Build up basic spatial propertis
+        self.SpatialDatas["PERMX"] = np.ones(self.N) * 10.0
+        self.SpatialDatas["PERMY"] = np.ones(self.N) * 10.0
+        self.SpatialDatas["PERMZ"] = np.ones(self.N) * 10.0
+        self.SpatialDatas["PORO"] = np.ones(self.N) * 0.3
 
 
     def LoadVar(self,Keyword,DataArray,DataSize):
@@ -599,31 +675,31 @@ class GRDECL_Parser:
 
     def isBoundaryCell(self,Cell=[0,0,0],Dim='3D'):
         ''' Check the a given cell is boundary cell or not
-        
+
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Sep. 2018
         '''
         count=0
         face=[]
         #Boundary Point
-        if(Cell[0]==0): 
+        if(Cell[0]==0):
             count+=1
             face.append('X-')
-        if(Cell[0]==self.NX-1): 
+        if(Cell[0]==self.NX-1):
             count+=1
             face.append('X+')
-        if(Cell[1]==0): 
+        if(Cell[1]==0):
             count+=1
             face.append('Y-')
-        if(Cell[1]==self.NY-1): 
+        if(Cell[1]==self.NY-1):
             count+=1
             face.append('Y+')
-        
+
         if(Dim=="3D"):
-            if(Cell[2]==0): 
+            if(Cell[2]==0):
                 count+=1
                 face.append('Z-')
-            if(Cell[2]==self.NZ-1): 
+            if(Cell[2]==self.NZ-1):
                 count+=1
                 face.append('Z-')
 

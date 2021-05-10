@@ -70,6 +70,10 @@ class GeologyModel:
         #* Create simple cartesian grid
         self.GRDECL_Data.buildCartGrid(physDims,gridDims)
 
+    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False}):
+        #* Create simple corner point grid
+        self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt)
+
     def GRDECL2VTK(self):
         #* Convert corner point grid/cartesian grid into VTK unstructure grid
         print('[Geometry] Converting GRDECL to Paraview Hexahedron mesh data....')
