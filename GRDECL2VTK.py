@@ -70,9 +70,9 @@ class GeologyModel:
         #* Create simple cartesian grid
         self.GRDECL_Data.buildCartGrid(physDims,gridDims)
 
-    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False}):
+    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False},faultDrop=0.):
         #* Create simple corner point grid
-        self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt)
+        self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt,faultDrop)
 
     def GRDECL2VTK(self):
         #* Convert corner point grid/cartesian grid into VTK unstructure grid

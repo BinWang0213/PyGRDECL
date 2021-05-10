@@ -240,7 +240,7 @@ class GRDECL_Parser:
         self.SpatialDatas["PORO"]=np.ones(self.N)*0.3
 
 
-    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False}):
+    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False},faultDrop=0.):
         """Build simple corner point grid
         Arguments
         ---------
@@ -304,6 +304,9 @@ class GRDECL_Parser:
                 for k in range(2 * self.NZ):
                     ZCORN[i, j, k] = z[IX[i], IY[j], IZ[k]]
 
+        # Add faultdrop
+        ZCORN[2*(self.NX//2):,:,:]+=faultDrop
+        # flatten ZCORN
         self.ZCORN = ZCORN.reshape((np.prod(ZCORN.size)), order='F')
 
         self.ACTNUM = np.ones((self.NX * self.NY * self.NZ))
