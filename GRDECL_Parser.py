@@ -244,8 +244,12 @@ class GRDECL_Parser:
         """Build simple corner point grid
         Arguments
         ---------
-        physDim  -- physical dimensions of system
-        gridDims -- grid dimension of system
+        physDim   -- physical dimensions of system
+        gridDims  -- grid dimension of system
+        opt['disturbed'] -- disturb from cartesian grid: skew pillars
+        opt['flat'] -- sinusoidal z
+        faultDrop -- fault drop at half the CPG in x direction
+
 
         Author:Mustapha Zakari(mustapha.zakari@univ-lorraine.fr)
         Date: May. 2021
@@ -266,21 +270,20 @@ class GRDECL_Parser:
         x, y, z = np.meshgrid(x_, y_, z_, indexing='ij')
 
         if (opt['disturbed']):
+            # skew pillars
             xmid=x[self.NX//2,0,0];
             zmid=z[0,0,self.NZ//2];
             x = x + 0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
             x = physDims[0] * x/x.max()#rescale
-            # x = x + 0.5 * (0.5 - abs(x - 0.5)) * (z - 0.5);
-        if (not opt['flat'] and opt['disturbed']):
+        if (not opt['flat']):
+            # add sinusoidal variations for z
             def fz(x, y):
-                z =  np.sin(math.pi * x) + 0.5*np.sin(math.pi * (y + x));
+                z =  np.sin(math.pi * x) + 0.5*np.sin(math.pi * (y +2*x));
                 return z
-
             for k in range(gridDims[2]+1):
                 xi = x[:, :, k] / physDims[0];
                 eta = y[:, :, k] / physDims[1];
                 z[:, :, k] = z[:, :, k] - 0.05*physDims[0]*fz(xi, eta);
-
             z = np.sort(z, 2);
             z = physDims[2]* (z-z.min())/(z.max()-z.min())
 
@@ -321,6 +324,46 @@ class GRDECL_Parser:
         self.SpatialDatas["PERMY"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PERMZ"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PORO"] = np.ones(self.N) * 0.3
+
+    def buildCornerPointNodes(self):
+        nx, ny, nz = self.NX, self.NY, self.NZ
+        ncell=nx*ny*nz
+        npillar = (nx + 1) * (ny + 1)
+
+        # Enumerate pillars in grid associate one pillar per node
+        pillarId = (np.linspace(1, npillar, npillar)).reshape((nx + 1, ny + 1), order='F')
+        pillarId-=1
+
+        p1 = pillarId[0:nx  ,0:ny];
+        p2 = pillarId[1:nx+1,0:ny];
+        p3 = pillarId[0:nx  ,1:ny+1];
+        p4 = pillarId[1:nx+1,1:ny+1];
+        del pillarId;
+
+        lineID=np.zeros((2*nx,2*ny,2*nz),dtype=int)
+        for k in range(2*nz):
+            lineID[0:2*nx:2, 0:2*ny:2,k] = p1;
+            lineID[1:2*nx:2, 0:2*ny:2,k] = p2;
+            lineID[0:2*nx:2, 1:2*ny:2,k] = p3;
+            lineID[1:2*nx:2, 1:2*ny:2,k] = p4;
+            lineID2=lineID.reshape((8*ncell),order='F')
+        del lineID,p1,p2,p3,p4;
+
+        lines0=self.COORD.reshape((npillar,6))
+        node_pillar=np.zeros((8*ncell,6),dtype=float)
+        for k in range(8*ncell):
+            for j in range(6):
+                node_pillar[k,j]=lines0[lineID2[k],j]
+        del lines0,lineID2;
+
+        # Reconstruct nodal coordinates from pillars
+        linFactor = (self.ZCORN[:] - node_pillar[:, 2]) / (node_pillar[:, 5] - node_pillar[:, 2]);
+        self.X=node_pillar[:,0]+linFactor*(node_pillar[:,3]-node_pillar[:,0])
+        self.Y=node_pillar[:,1]+linFactor*(node_pillar[:,4]-node_pillar[:,1])
+
+        self.X=(self.DX).reshape((2*nx,2*ny,2*nz),order='F')
+        self.Y=(self.DY).reshape((2*nx,2*ny,2*nz),order='F')
+        self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
 
 
     def LoadVar(self,Keyword,DataArray,DataSize):
@@ -532,7 +575,7 @@ class GRDECL_Parser:
         if(Face=="X+"): FaceIds=[CellIds[1],CellIds[3],CellIds[5],CellIds[7]]
         if(Face=="Y-"): FaceIds=[CellIds[0],CellIds[1],CellIds[4],CellIds[5]]
         if(Face=="Y+"): FaceIds=[CellIds[2],CellIds[3],CellIds[6],CellIds[7]]
-        
+
         return [self.ZCORN[i] for i in FaceIds]
 
     def getCellCoords(self,i,j,k):
@@ -761,7 +804,7 @@ class GRDECL_Parser:
 
 #############################################
 #
-#  Auxilary function
+#  Auxiliary function
 #
 #############################################
 
