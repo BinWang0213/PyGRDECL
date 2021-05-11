@@ -46,7 +46,7 @@ class GRDECL_Parser:
         Arguments
         ---------
         NX, NY, NZ         -- Grid dimension.
-        Trans(i01,j01,k01) -- Transmisability in i,j,k direction
+        Trans(i01,j01,k01) -- Transmissibility in i,j,k direction
         fault(i01,j01)     -- Fault indicator in i,j direction(0-sealing, 0.5-partially connecting, 1-fully connecting)
         GRID_type           - 0-Cartesian 1-Corner point
 
@@ -259,8 +259,6 @@ class GRDECL_Parser:
         print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)" % (self.NX, self.NY, self.NZ))
         print("     NumOfGrids=%s" % (self.N))
 
-        # opt.disturbed = True;
-        # opt.flat = False
         # Create x,y,z vectors. Disturb x,z
         x_= np.linspace(0, physDims[0], self.NX + 1)
         y_= np.linspace(0, physDims[1], self.NY + 1)
@@ -268,46 +266,53 @@ class GRDECL_Parser:
         x, y, z = np.meshgrid(x_, y_, z_, indexing='ij')
 
         if (opt['disturbed']):
-            x = x + 0.2 * (0.5 - abs(x - 0.5)) * (z - 0.5);
+            xmid=x[self.NX//2,0,0];
+            zmid=z[0,0,self.NZ//2];
+            x = x + 0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
+            x = physDims[0] * x/x.max()#rescale
+            # x = x + 0.5 * (0.5 - abs(x - 0.5)) * (z - 0.5);
         if (not opt['flat'] and opt['disturbed']):
             def fz(x, y):
-                z = -0.05 * np.sin(math.pi * (x - 0.5)) - 0.075 * np.sin(math.pi * (y + 2 * x));
+                z =  np.sin(math.pi * x) + 0.5*np.sin(math.pi * (y + x));
                 return z
 
             for k in range(gridDims[2]+1):
                 xi = x[:, :, k] / physDims[0];
                 eta = y[:, :, k] / physDims[1];
-                z[:, :, k] = z[:, :, k] + fz(xi, eta);
+                z[:, :, k] = z[:, :, k] - 0.05*physDims[0]*fz(xi, eta);
 
             z = np.sort(z, 2);
+            z = physDims[2]* (z-z.min())/(z.max()-z.min())
+
 
         # Create pillars
-        ## nb of pillars (nx+1)*(ny+1)
-        npillar = np.prod(np.array(gridDims[0:2]) + 1)
-        ## Each pillar has bottom&top xyz COORD (6 coordinates)
+        npillar = (self.NX + 1)*(self.NY + 1)
+        ## Each pillar bottom & top xyz COORD (6 coordinates)
         lines = np.zeros((npillar, 6));
-        ## Set columns x y z min | x y z max
+        ## Set columns Bottom + Top  coordinates: xB yB zB xT yT zT
         for i, V in enumerate([x, y, z]):
-            lines[:, i] = V[:, :, 0].reshape((npillar), order='F');
-            lines[:, i + 3] = V[:, :, -1].reshape((npillar), order='F');
+            lines[:, i] = V[:, :, 0].reshape((npillar), order='F');      #Bottom:iz=0
+            lines[:, i + 3] = V[:, :, -1].reshape((npillar), order='F'); #Top:iz=lastindex=-1
+        ## flatten lines to create COORD
         self.COORD = lines.reshape((np.prod(lines.size)))
 
         # Assign z-coordinates
-        # repeated indices in each direction: 0, 1, 1, 2, 2, ..., dims(d)-1, dims(d)-1, dims(d)
+        ## Add repeated indices to z in each direction: 0, 1, 1, 2, 2, ..., dims(d)-1, dims(d)-1, dims(d)
+        ##
         def repInd(d):
             return (np.floor(np.linspace(1, 2 * gridDims[d], 2 * gridDims[d]) / 2)).astype(int)
-
         IX, IY, IZ = repInd(0), repInd(1), repInd(2)
-        ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
+
+        self.ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
         for i in range(2 * self.NX):
             for j in range(2 * self.NY):
                 for k in range(2 * self.NZ):
-                    ZCORN[i, j, k] = z[IX[i], IY[j], IZ[k]]
+                    self.ZCORN[i, j, k] = z[IX[i], IY[j], IZ[k]]
 
-        # Add faultdrop
-        ZCORN[2*(self.NX//2):,:,:]+=faultDrop
+        # Add a fault drop at half the x range
+        self.ZCORN[2*(self.NX//2):,:,:]+=faultDrop
         # flatten ZCORN
-        self.ZCORN = ZCORN.reshape((np.prod(ZCORN.size)), order='F')
+        self.ZCORN = self.ZCORN.reshape((np.prod(self.ZCORN.size)), order='F')
 
         self.ACTNUM = np.ones((self.NX * self.NY * self.NZ))
 
