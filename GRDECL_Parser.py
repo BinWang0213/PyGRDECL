@@ -361,8 +361,8 @@ class GRDECL_Parser:
         self.X=node_pillar[:,0]+linFactor*(node_pillar[:,3]-node_pillar[:,0])
         self.Y=node_pillar[:,1]+linFactor*(node_pillar[:,4]-node_pillar[:,1])
 
-        self.X=(self.DX).reshape((2*nx,2*ny,2*nz),order='F')
-        self.Y=(self.DY).reshape((2*nx,2*ny,2*nz),order='F')
+        self.X=(self.X).reshape((2*nx,2*ny,2*nz),order='F')
+        self.Y=(self.Y).reshape((2*nx,2*ny,2*nz),order='F')
         self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
 
 
