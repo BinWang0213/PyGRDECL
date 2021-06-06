@@ -37,6 +37,23 @@ KeyWordsDatatypes=[#Corrsponding data types
     float,float,float
 ]
 
+class nodes:
+    def __init__(self):
+        self.coords=[]
+        self.num=0
+
+class cells:
+    def __init__(self):
+        self.num=0
+        self.indexMap=[]
+
+class faces:
+    def __init__(self):
+        self.nodes=[]
+        self.nodePos=[]
+        self.neighbors=[]
+        self.tag=[]
+        self.cellTags=[]
 
 class GRDECL_Parser:
     def __init__(self,filename='',nx=0,ny=0,nz=0):
@@ -372,7 +389,29 @@ class GRDECL_Parser:
         self.Y=(self.Y).reshape((2*nx,2*ny,2*nz),order='F')
         self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
 
-    # def createInitialGrid(self):
+    def createInitialGrid(self):
+        # Find unique points
+        self.GRID_type='INVALID'
+        self.dim=3;
+        self.nodes=nodes()
+        N=np.prod(self.Z.size);
+        self.nodes.coords=np.zeros((N,3))
+        self.nodes.coords[:,0]=self.Z.reshape((N), order='F')
+        self.nodes.coords[:,1]=self.Y.reshape((N), order='F')
+        self.nodes.coords[:,2]=self.X.reshape((N), order='F')
+
+        self.nodes.coords, ia,ic =np.unique(self.nodes.coords, return_index=True, return_inverse=True, axis=0)
+        self.nodes.coords=np.fliplr( self.nodes.coords)
+        self.nodes.num=self.nodes.coords[:,0].size
+        self.cartDims= [number // 2 for number in self.X.shape]
+
+        self.cells=cells()
+        self.cells.num=np.prod(self.cartDims)
+        self.cells.indexMap=np.array(range(self.cells.num))
+
+        self.faces=faces()
+        self.P=ic.reshape(self.X.shape,order='F')
+        self.B=np.array(range(self.cells.num)).reshape(self.cartDims,order='F')
 
     def processGRDECL(self):
         self.buildCornerPointNodes()
@@ -410,7 +449,7 @@ class GRDECL_Parser:
         for V in [self.X, self.Y, self.Z]:
             V[isnan(V)]=float('Inf')
 
-
+        self.createInitialGrid()
 
     def LoadVar(self,Keyword,DataArray,DataSize):
         """Load varables into class
