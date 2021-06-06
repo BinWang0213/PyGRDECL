@@ -37,6 +37,23 @@ KeyWordsDatatypes=[#Corrsponding data types
     float,float,float
 ]
 
+class nodes:
+    def __init__(self):
+        self.coords=[]
+        self.num=0
+
+class cells:
+    def __init__(self):
+        self.num=0
+        self.indexMap=[]
+
+class faces:
+    def __init__(self):
+        self.nodes=[]
+        self.nodePos=[]
+        self.neighbors=[]
+        self.tag=[]
+        self.cellTags=[]
 
 class GRDECL_Parser:
     def __init__(self,filename='',nx=0,ny=0,nz=0):
@@ -273,7 +290,7 @@ class GRDECL_Parser:
             # skew pillars
             xmid=x[self.NX//2,0,0];
             zmid=z[0,0,self.NZ//2];
-            x = x + 0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
+            x = x +3*0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
             x = physDims[0] * x/x.max()#rescale
         if (not opt['flat']):
             # add sinusoidal variations for z
@@ -292,54 +309,59 @@ class GRDECL_Parser:
         npillar = (self.NX + 1)*(self.NY + 1)
         ## Each pillar bottom & top xyz COORD (6 coordinates)
         lines = np.zeros((npillar, 6));
-        ## Set columns Bottom + Top  coordinates: xB yB zB xT yT zT
+        ## Set columns Bottom/Top (z[0]/z[end]) coordinates: xB yB zB xT yT zT
         for i, V in enumerate([x, y, z]):
-            lines[:, i] = V[:, :, 0].reshape((npillar), order='F');      #Bottom:iz=0
+            lines[:, i + 0] = V[:, :,  0].reshape((npillar), order='F');      #Bottom:iz=0
             lines[:, i + 3] = V[:, :, -1].reshape((npillar), order='F'); #Top:iz=lastindex=-1
         ## flatten lines to create COORD
         self.COORD = lines.reshape((np.prod(lines.size)))
 
         # Assign z-coordinates
-        ## Add repeated indices to z in each direction: 0, 1, 1, 2, 2, ..., dims(d)-1, dims(d)-1, dims(d)
-        ##
+        ## Add repeated indices to z in each direction:
+        ## 0,    1,1,       2,2,   ... ,gridDims(d)-1,gridDims(d)-1, gridDims(d)
+        ## 0, 2//2,3//2, 4//2,5//2,... ,                           ,2*gridDims(d)//2
         def repInd(d):
-            return (np.floor(np.linspace(1, 2 * gridDims[d], 2 * gridDims[d]) / 2)).astype(int)
+            return np.linspace(1, 2*gridDims[d], 2*gridDims[d],dtype=int)//2
         IX, IY, IZ = repInd(0), repInd(1), repInd(2)
 
         self.ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
-        for i in range(2 * self.NX):
+        for k in range(2 * self.NZ):
             for j in range(2 * self.NY):
-                for k in range(2 * self.NZ):
+                for i in range(2 * self.NX):
                     self.ZCORN[i, j, k] = z[IX[i], IY[j], IZ[k]]
 
-        # Add a fault drop at half the x range
-        self.ZCORN[2*(self.NX//2):,:,:]+=faultDrop
+        # Add a fault drop after half the x range: (odd index)
+        ## [0, 1],[2, 3],4, ... ,2*(gridDims(d)-1)],[2*gridDims(d)-1, 2*gridDims(d)]
+        iFault=self.NX//2
+        self.ZCORN[2*iFault:,:,:]+=faultDrop
+
         # flatten ZCORN
         self.ZCORN = self.ZCORN.reshape((np.prod(self.ZCORN.size)), order='F')
-
-        self.ACTNUM = np.ones((self.NX * self.NY * self.NZ))
-
         # Build up basic spatial propertis
+        self.ACTNUM = np.ones((self.N))
         self.SpatialDatas["PERMX"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PERMY"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PERMZ"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PORO"] = np.ones(self.N) * 0.3
 
     def buildCornerPointNodes(self):
+        # Construct nodal coordinates for Corner Point Grid
         nx, ny, nz = self.NX, self.NY, self.NZ
         ncell=nx*ny*nz
         npillar = (nx + 1) * (ny + 1)
 
         # Enumerate pillars in grid associate one pillar per node
-        pillarId = (np.linspace(1, npillar, npillar)).reshape((nx + 1, ny + 1), order='F')
+        # Id from  reshaping of [1 2 3 ... npillar] (column major Fortran ordering 11,21,12,22)
+        pillarId = (np.linspace(1, npillar, npillar,dtype=int)).reshape((nx + 1, ny + 1), order='F')
         pillarId-=1
 
+        # Assign separately 4 pillar Ids per cell 00,10,01,11
         p1 = pillarId[0:nx  ,0:ny];
         p2 = pillarId[1:nx+1,0:ny];
         p3 = pillarId[0:nx  ,1:ny+1];
         p4 = pillarId[1:nx+1,1:ny+1];
         del pillarId;
-
+        # Assign 4 pillar Ids per cell (with repetitions) and vector reshape it
         lineID=np.zeros((2*nx,2*ny,2*nz),dtype=int)
         for k in range(2*nz):
             lineID[0:2*nx:2, 0:2*ny:2,k] = p1;
@@ -349,14 +371,16 @@ class GRDECL_Parser:
             lineID2=lineID.reshape((8*ncell),order='F')
         del lineID,p1,p2,p3,p4;
 
-        lines0=self.COORD.reshape((npillar,6))
+        # Use COORD and 4 pillar Ids per cell to get
+        # xmymzmxMyMzM pillar coord for their 8 cell nodes
+        COORD2=self.COORD.reshape((npillar,6))
         node_pillar=np.zeros((8*ncell,6),dtype=float)
         for k in range(8*ncell):
             for j in range(6):
-                node_pillar[k,j]=lines0[lineID2[k],j]
-        del lines0,lineID2;
+                node_pillar[k,j]=COORD2[lineID2[k],j]
+        del COORD2,lineID2;
 
-        # Reconstruct nodal coordinates from pillars
+        # Reconstruct nodal coordinates from pillars and ZCORN
         linFactor = (self.ZCORN[:] - node_pillar[:, 2]) / (node_pillar[:, 5] - node_pillar[:, 2]);
         self.X=node_pillar[:,0]+linFactor*(node_pillar[:,3]-node_pillar[:,0])
         self.Y=node_pillar[:,1]+linFactor*(node_pillar[:,4]-node_pillar[:,1])
@@ -365,6 +389,67 @@ class GRDECL_Parser:
         self.Y=(self.Y).reshape((2*nx,2*ny,2*nz),order='F')
         self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
 
+    def createInitialGrid(self):
+        # Find unique points
+        self.GRID_type='INVALID'
+        self.dim=3;
+        self.nodes=nodes()
+        N=np.prod(self.Z.size);
+        self.nodes.coords=np.zeros((N,3))
+        self.nodes.coords[:,0]=self.Z.reshape((N), order='F')
+        self.nodes.coords[:,1]=self.Y.reshape((N), order='F')
+        self.nodes.coords[:,2]=self.X.reshape((N), order='F')
+
+        self.nodes.coords, ia,ic =np.unique(self.nodes.coords, return_index=True, return_inverse=True, axis=0)
+        self.nodes.coords=np.fliplr( self.nodes.coords)
+        self.nodes.num=self.nodes.coords[:,0].size
+        self.cartDims= [number // 2 for number in self.X.shape]
+
+        self.cells=cells()
+        self.cells.num=np.prod(self.cartDims)
+        self.cells.indexMap=np.array(range(self.cells.num))
+
+        self.faces=faces()
+        self.P=ic.reshape(self.X.shape,order='F')
+        self.B=np.array(range(self.cells.num)).reshape(self.cartDims,order='F')
+
+    def processGRDECL(self):
+        self.buildCornerPointNodes()
+        ## Reverse z if dz<0
+        # Expand actnum by 2 in each direction
+        from numpy import tile
+        # self.ACTNUM = (self.ACTNUM).reshape((self.NX, self.NY, self.NZ), order='F')
+        # a = tile(self.ACTNUM, (2, 2, 2))
+        # z=self.Z; z[a==0]=float('NaN')
+        # dz=np.diff(z)
+        # self.Z=dz;
+
+        # Add top+bottom layers to ensure correct processing of outer bdry at faults
+        minz=(self.Z).min();maxz=(self.Z).max()
+
+        e       = np.zeros((2*self.NX,2*self.NY,1))
+        self.Z     = np.concatenate((minz-2+e,minz-1+e,self.Z,maxz+1+e,maxz+2+e),axis=2)
+
+        e1 = (self.X[:,:,0]).reshape((2*self.NX,2*self.NY,1));
+        e2 = (self.X[:,:,-1]).reshape((2*self.NX,2*self.NY,1));
+        self.X     = np.concatenate((e1,e1,self.X,e2,e2),axis=2)
+
+        e1 = (self.Y[:,:,0]).reshape((2*self.NX,2*self.NY,1));
+        e2 = (self.Y[:,:,-1]).reshape((2*self.NX,2*self.NY,1));
+        self.Y     = np.concatenate((e1,e1,self.Y,e2,e2),axis=2)
+
+        # Mark active new layers
+        actnum =(self.ACTNUM).reshape(self.NX,self.NY,self.NZ);
+        e = np.ones((self.NX,self.NY,1), dtype=bool)
+        self.actnum = np.concatenate((e,actnum,e),axis=2)
+        self.numAuxiliaryCells = 2* np.prod(e.shape)
+
+        # Replace nan coordinates in X,Y,Z by inf to avoid nan
+        from numpy import isnan
+        for V in [self.X, self.Y, self.Z]:
+            V[isnan(V)]=float('Inf')
+
+        self.createInitialGrid()
 
     def LoadVar(self,Keyword,DataArray,DataSize):
         """Load varables into class
