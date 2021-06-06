@@ -273,7 +273,7 @@ class GRDECL_Parser:
             # skew pillars
             xmid=x[self.NX//2,0,0];
             zmid=z[0,0,self.NZ//2];
-            x = x + 0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
+            x = x +3*0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
             x = physDims[0] * x/x.max()#rescale
         if (not opt['flat']):
             # add sinusoidal variations for z
@@ -301,9 +301,10 @@ class GRDECL_Parser:
 
         # Assign z-coordinates
         ## Add repeated indices to z in each direction:
-        ## 0, 1,1, 2,2, ... ,gridDims(d)-1,gridDims(d)-1, gridDims(d)
+        ## 0,    1,1,       2,2,   ... ,gridDims(d)-1,gridDims(d)-1, gridDims(d)
+        ## 0, 2//2,3//2, 4//2,5//2,... ,                           ,2*gridDims(d)//2
         def repInd(d):
-            return (np.floor(np.linspace(1, 2 * gridDims[d], 2 * gridDims[d]) / 2)).astype(int)
+            return np.linspace(1, 2*gridDims[d], 2*gridDims[d],dtype=int)//2
         IX, IY, IZ = repInd(0), repInd(1), repInd(2)
 
         self.ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
@@ -327,13 +328,14 @@ class GRDECL_Parser:
         self.SpatialDatas["PORO"] = np.ones(self.N) * 0.3
 
     def buildCornerPointNodes(self):
+        # Construct nodal coordinates for Corner Point Grid
         nx, ny, nz = self.NX, self.NY, self.NZ
         ncell=nx*ny*nz
         npillar = (nx + 1) * (ny + 1)
 
         # Enumerate pillars in grid associate one pillar per node
         # Id from  reshaping of [1 2 3 ... npillar] (column major Fortran ordering 11,21,12,22)
-        pillarId = (np.linspace(1, npillar, npillar)).reshape((nx + 1, ny + 1), order='F')
+        pillarId = (np.linspace(1, npillar, npillar,dtype=int)).reshape((nx + 1, ny + 1), order='F')
         pillarId-=1
 
         # Assign separately 4 pillar Ids per cell 00,10,01,11
@@ -369,6 +371,45 @@ class GRDECL_Parser:
         self.X=(self.X).reshape((2*nx,2*ny,2*nz),order='F')
         self.Y=(self.Y).reshape((2*nx,2*ny,2*nz),order='F')
         self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
+
+    # def createInitialGrid(self):
+
+    def processGRDECL(self):
+        self.buildCornerPointNodes()
+        ## Reverse z if dz<0
+        # Expand actnum by 2 in each direction
+        from numpy import tile
+        # self.ACTNUM = (self.ACTNUM).reshape((self.NX, self.NY, self.NZ), order='F')
+        # a = tile(self.ACTNUM, (2, 2, 2))
+        # z=self.Z; z[a==0]=float('NaN')
+        # dz=np.diff(z)
+        # self.Z=dz;
+
+        # Add top+bottom layers to ensure correct processing of outer bdry at faults
+        minz=(self.Z).min();maxz=(self.Z).max()
+
+        e       = np.zeros((2*self.NX,2*self.NY,1))
+        self.Z     = np.concatenate((minz-2+e,minz-1+e,self.Z,maxz+1+e,maxz+2+e),axis=2)
+
+        e1 = (self.X[:,:,0]).reshape((2*self.NX,2*self.NY,1));
+        e2 = (self.X[:,:,-1]).reshape((2*self.NX,2*self.NY,1));
+        self.X     = np.concatenate((e1,e1,self.X,e2,e2),axis=2)
+
+        e1 = (self.Y[:,:,0]).reshape((2*self.NX,2*self.NY,1));
+        e2 = (self.Y[:,:,-1]).reshape((2*self.NX,2*self.NY,1));
+        self.Y     = np.concatenate((e1,e1,self.Y,e2,e2),axis=2)
+
+        # Mark active new layers
+        actnum =(self.ACTNUM).reshape(self.NX,self.NY,self.NZ);
+        e = np.ones((self.NX,self.NY,1), dtype=bool)
+        self.actnum = np.concatenate((e,actnum,e),axis=2)
+        self.numAuxiliaryCells = 2* np.prod(e.shape)
+
+        # Replace nan coordinates in X,Y,Z by inf to avoid nan
+        from numpy import isnan
+        for V in [self.X, self.Y, self.Z]:
+            V[isnan(V)]=float('Inf')
+
 
 
     def LoadVar(self,Keyword,DataArray,DataSize):

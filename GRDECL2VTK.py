@@ -77,6 +77,9 @@ class GeologyModel:
     def buildCornerPointNodes(self):
         self.GRDECL_Data.buildCornerPointNodes()
 
+    def processGRDECL(self):
+        self.GRDECL_Data.processGRDECL()
+
     def GRDECL2VTK(self):
         #* Convert corner point grid/cartesian grid into VTK unstructure grid
         print('[Geometry] Converting GRDECL to Paraview Hexahedron mesh data....')
