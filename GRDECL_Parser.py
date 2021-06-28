@@ -49,9 +49,9 @@ class cells:
 
 class faces:
     def __init__(self):
-        self.nodes=[]
-        self.nodePos=[]
-        self.neighbors=[]
+        self.nodes    = np.empty((0,1), int)
+        self.nodePos  = np.empty((0,1), int)
+        self.neighbors= np.empty((0,1), int)
         self.tag=[]
         self.cellTags=[]
 
@@ -87,6 +87,13 @@ class GRDECL_Parser:
         self.COORD=[]
         self.ZCORN=[] #http://maoxp9.blog.163.com/blog/static/122653420093894133671/
         self.ACTNUM=[]
+
+        #MRST Format grid attributes
+        self.gridDim=3
+        self.cartDims=[]
+        self.nodes=nodes()
+        self.cells=cells()
+        self.faces=faces()
 
         #Petrophysics data Keywords
         self.SpatialDatas={}
@@ -389,35 +396,9 @@ class GRDECL_Parser:
         self.Y=(self.Y).reshape((2*nx,2*ny,2*nz),order='F')
         self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
 
-    def createInitialGrid(self):
-        # Find unique points
-        self.GRID_type='INVALID'
-        self.dim=3;
-        self.nodes=nodes()
-        N=np.prod(self.Z.size);
-        self.nodes.coords=np.zeros((N,3))
-        self.nodes.coords[:,0]=self.Z.reshape((N), order='F')
-        self.nodes.coords[:,1]=self.Y.reshape((N), order='F')
-        self.nodes.coords[:,2]=self.X.reshape((N), order='F')
-
-        self.nodes.coords, ia,ic =np.unique(self.nodes.coords, return_index=True, return_inverse=True, axis=0)
-        self.nodes.coords=np.fliplr( self.nodes.coords)
-        self.nodes.num=self.nodes.coords[:,0].size
-        self.cartDims= [number // 2 for number in self.X.shape]
-
-        self.cells=cells()
-        self.cells.num=np.prod(self.cartDims)
-        self.cells.indexMap=np.array(range(self.cells.num))
-
-        self.faces=faces()
-        self.P=ic.reshape(self.X.shape,order='F')
-        self.B=np.array(range(self.cells.num)).reshape(self.cartDims,order='F')
-
-    def processGRDECL(self):
-        self.buildCornerPointNodes()
         ## Reverse z if dz<0
         # Expand actnum by 2 in each direction
-        from numpy import tile
+        # from numpy import tile
         # self.ACTNUM = (self.ACTNUM).reshape((self.NX, self.NY, self.NZ), order='F')
         # a = tile(self.ACTNUM, (2, 2, 2))
         # z=self.Z; z[a==0]=float('NaN')
@@ -425,31 +406,230 @@ class GRDECL_Parser:
         # self.Z=dz;
 
         # Add top+bottom layers to ensure correct processing of outer bdry at faults
-        minz=(self.Z).min();maxz=(self.Z).max()
+        minz = (self.Z).min();
+        maxz = (self.Z).max();
 
-        e       = np.zeros((2*self.NX,2*self.NY,1))
-        self.Z     = np.concatenate((minz-2+e,minz-1+e,self.Z,maxz+1+e,maxz+2+e),axis=2)
+        e = np.zeros((2 * self.NX, 2 * self.NY, 1))
+        self.Z = np.concatenate((minz - 2 + e, minz - 1 + e, self.Z, maxz + 1 + e, maxz + 2 + e), axis=2)
 
-        e1 = (self.X[:,:,0]).reshape((2*self.NX,2*self.NY,1));
-        e2 = (self.X[:,:,-1]).reshape((2*self.NX,2*self.NY,1));
-        self.X     = np.concatenate((e1,e1,self.X,e2,e2),axis=2)
+        e1 = (self.X[:, :, 0]).reshape((2 * self.NX, 2 * self.NY, 1));
+        e2 = (self.X[:, :, -1]).reshape((2 * self.NX, 2 * self.NY, 1));
+        self.X = np.concatenate((e1, e1, self.X, e2, e2), axis=2)
 
-        e1 = (self.Y[:,:,0]).reshape((2*self.NX,2*self.NY,1));
-        e2 = (self.Y[:,:,-1]).reshape((2*self.NX,2*self.NY,1));
-        self.Y     = np.concatenate((e1,e1,self.Y,e2,e2),axis=2)
+        e1 = (self.Y[:, :, 0]).reshape((2 * self.NX, 2 * self.NY, 1));
+        e2 = (self.Y[:, :, -1]).reshape((2 * self.NX, 2 * self.NY, 1));
+        self.Y = np.concatenate((e1, e1, self.Y, e2, e2), axis=2)
 
         # Mark active new layers
-        actnum =(self.ACTNUM).reshape(self.NX,self.NY,self.NZ);
-        e = np.ones((self.NX,self.NY,1), dtype=bool)
-        self.actnum = np.concatenate((e,actnum,e),axis=2)
-        self.numAuxiliaryCells = 2* np.prod(e.shape)
+        actnum = (self.ACTNUM).reshape(self.NX, self.NY, self.NZ);
+        e = np.ones((self.NX, self.NY, 1), dtype=bool)
+        self.actnum = np.concatenate((e, actnum, e), axis=2)
+        self.numAuxiliaryCells = 2 * np.prod(e.shape)
 
         # Replace nan coordinates in X,Y,Z by inf to avoid nan
         from numpy import isnan
         for V in [self.X, self.Y, self.Z]:
-            V[isnan(V)]=float('Inf')
+            V[isnan(V)] = float('Inf')
 
+    def createInitialGrid(self):
+        # Find unique points
+        self.GRID_type='INVALID'
+        self.dim=3;
+        N=np.prod(self.Z.size);
+        # Return the sorted list/array of unique elements of the coord array
+        # sorted following i,j,k implies Z must be the first lexicographic axis
+        self.nodes.coords=np.zeros((N,3))
+        self.nodes.coords[:,0]=self.Z.reshape((N), order='F')
+        self.nodes.coords[:,1]=self.Y.reshape((N), order='F')
+        self.nodes.coords[:,2]=self.X.reshape((N), order='F')
+
+        # ia: indices of kept unique values in initial array: a,ia=unique(ar0) <=> a=ar0[ia]
+        # ic: indices to reconstruct initial array: a,ia,ic=unique(ar0) <=> ar0=a[ic]
+        self.nodes.coords, ia,ic =np.unique(self.nodes.coords, return_index=True, return_inverse=True, axis=0)
+        self.nodes.coords=np.fliplr( self.nodes.coords)
+        self.nodes.num=self.nodes.coords[:,0].size
+        self.cartDims= [number // 2 for number in self.X.shape] #nb of cells in each direction
+
+        self.cells.num=np.prod(self.cartDims)
+        # Cell indices growing i,j,k
+        self.cells.indexMap=np.array(range(self.cells.num))
+
+        # Store indices in P to reconstruct and repeat all point coords
+        self.P=ic.reshape(self.X.shape,order='F')
+        # Assign each cart cell each unique Id in array B : growing i,j,k
+        self.B=np.array(range(self.cells.num)).reshape(self.cartDims,order='F')
+
+    def index(self,i,j,k,sz):
+        I,J,K=  np.meshgrid(i,j,k, indexing='ij')
+        #find linear index from 3D indices equiv to sub2ind in matlab
+        return np.ravel_multi_index([I,J,K], sz, order='F').reshape(-1,order='F')
+
+    def findFaces(self):
+        # Find regular faces including their nodes, cell neighbors and direction
+        #         PARAMETERS:
+        #    G      - Grid struct that faces will be filled into.
+        #
+        #    P      - 3d-array of point numbers for each cell in the grid, .i.e.,
+        #             the grid cell (i,j,k) has corner points numbers
+        #                 n1 = P(2*i-1,2*j-1,2*k-1)
+        #                 n2 = P(2*i  ,2*j-1,2*k-1)
+        #                 n3 = P(2*i-1,2*j  ,2*k-1)
+        #                 n4 = P(2*i  ,2*j  ,2*k-1)
+        #                 n5 = P(2*i-1,2*j-1,2*k  )
+        #                 n6 = P(2*i  ,2*j-1,2*k  )
+        #                 n6 = P(2*i-1,2*j  ,2*k  )
+        #                 n8 = P(2*i  ,2*j  ,2*k  )
+        #
+        #    B      - Block numbers in the grid.  These are included for convenience
+        #             as they could easily have been computed from (i,j,k).
+        #
+        #    actnum - Array of 0/1, 0 indicate inactive cell, 1 active cell.
+        #
+        #    tags   - Face tag (numeric) that should be inserted into G.
+        #
+        #    opt    - options struct from which opt.verbose is used.
+        #
+        sz  = self.P.shape
+        szb = self.B.shape
+
+        # Find face corners
+        di=1;#i step next index
+        dj=sz[0]#j step next index
+        dk=dj*sz[1]#k step next index
+        # first internal faces (West)
+        k=self.index(np.array(range(1,sz[0]-1,2)),np.array(range(0,sz[1],2)),np.array(range(0,sz[2]-1,2)),sz)
+        # Internal faces
+        # converting unique indices k in first global indices from P
+        # f = [P(k), P(k+dj), P(k+dj+dk), P(k+dk)];
+        #     [c1    c2       c3          c4     ]
+        c1=self.P[np.unravel_index(k, self.P.shape, 'F')]
+        c2=self.P[np.unravel_index(k+dj, self.P.shape, 'F')]
+        c3=self.P[np.unravel_index(k+dj+dk, self.P.shape, 'F')]
+        c4=self.P[np.unravel_index(k+dk, self.P.shape, 'F')]
+        self.f=np.ones((c1.size,4))
+        C=[c1,c2,c3,c4]
+        for i in range(4):
+            self.f[:,i]=C[i]
+        # first internal unique indices of faces (East)
+        k=k+di
+        self.g=np.ones((c1.size,4))
+        c1=self.P[np.unravel_index(k, self.P.shape, 'F')]
+        c2=self.P[np.unravel_index(k+dj, self.P.shape, 'F')]
+        c3=self.P[np.unravel_index(k+dj+dk, self.P.shape, 'F')]
+        c4=self.P[np.unravel_index(k+dk, self.P.shape, 'F')]
+        C=[c1,c2,c3,c4]
+        for i in range(4):
+            self.g[:,i]=C[i]
+
+        # Neighbor cells
+        k=self.index(np.array(range(szb[0]-1)),np.array(range(szb[1])),np.array(range(szb[2])),szb)
+        self.c1 = self.B[np.unravel_index(k, self.B.shape, 'F')]
+        k=self.index(np.array(range(1,szb[0])),np.array(range(szb[1])),np.array(range(szb[2])),szb)
+        self.c2 = self.B[np.unravel_index(k, self.B.shape, 'F')]
+
+        # Keep only perfectly matching cell pairs (c1,c2)
+        self.h=np.all(self.f==self.g,1)
+        shape=[i//2 for i in sz];shape[0]-=1
+        self.h=np.all(self.h.reshape((shape),order='F'),2)
+        self.h = np.repeat(self.h[:, :, np.newaxis], sz[2]//2, axis=2)
+        self.c1=self.c1[np.where(self.h.reshape((self.h.size),order='F'))]
+        self.c2=self.c2[np.where(self.h.reshape((self.h.size),order='F'))]
+        self.h=np.where(self.h.reshape((self.h.size), order='F'))
+        self.f = self.f[self.h[0][:],:]
+        del self.g,self.h
+
+        # Regular Boundary faces
+        k=self.index(np.array([0,sz[0]-1]),np.array(range(0,sz[1],2)),np.array(range(0,sz[2]-1,2)),sz)
+        # fB = [self.P(k), P(k + dj), P(k + dj + dk), P(k + dk)];
+        c1=self.P[np.unravel_index(k, self.P.shape, 'F')]
+        c2=self.P[np.unravel_index(k+dj, self.P.shape, 'F')]
+        c3=self.P[np.unravel_index(k+dj+dk, self.P.shape, 'F')]
+        c4=self.P[np.unravel_index(k+dk, self.P.shape, 'F')]
+        C=[c1,c2,c3,c4]
+        self.fB=np.ones((c1.size,4))
+        for i in range(4):
+            self.fB[:,i]=C[i]
+        k=self.index([0,szb[0]-1],np.array(range(szb[1])),np.array(range(szb[2])),szb)
+        self.cB = self.B[np.unravel_index(k, self.B.shape, 'F')]
+        # # tagB = repmat(tags(:), [numel(cB) / 2, 1]);
+        self.tagB= np.tile(self.tag, self.cB.size//2)
+
+        # Append boundary faces
+        self.f=np.vstack((self.f,self.fB))
+        del self.fB
+        self.cB[self.tagB==self.tag[0]]=-1
+        self.c1=np.hstack((self.c1,self.cB))#
+        self.cB = self.B[np.unravel_index(k, self.B.shape, 'F')]
+        self.cB[self.tagB==self.tag[1]]=-1
+        self.c2=np.hstack((self.c2,self.cB))#
+
+        # Filter out inactive and degenerate cell pairs
+        # Remove inactive cells
+        self.actnum_lin=np.reshape(self.actnum,-1)
+        self.c1[self.c1 != -1] *= (self.actnum_lin[self.c1 != -1]).astype('int32')
+        self.c2[self.c2 != -1] *= (self.actnum_lin[self.c2 != -1]).astype('int32')
+
+        # Remove faces with no neighbors and pinched faces
+        ind = ((self.c1 != -1) | (self.c2 != -1)) & ~((self.f[:, 0] == self.f[:, 3]) & (self.f[:, 1] == self.f[:, 2]))
+        self.f = self.f[ind, :]
+        self.c1 = self.c1[ind]
+        self.c2 = self.c2[ind]
+
+        # Remove zero-area faces
+        ind =(self.f[:,0]==self.f[:,3]) & (self.f[:,1]==self.f[:,2]);
+        self.f = self.f[~ind, :]
+        self.c1 = self.c1[~ind]
+        self.c2 = self.c2[~ind]
+
+
+        # Remove repeated nodes from pinch
+        self.f[self.f[:,0]==self.f[:,3], 0]=float("nan");
+        self.f[self.f[:,1]==self.f[:,2], 0]=float("nan");
+        self.F=np.reshape(np.hstack((self.f,float("inf")*np.ones((self.f.shape[0],1),dtype=float))),(-1,1))
+        self.nF=np.where(self.F==float("inf"))
+        self.nF=np.diff(np.hstack(([-1],self.nF[0])))-1
+        self.F=self.F[self.F!=float("inf")]
+
+        # Write results to grid srtucture
+        n=self.c1.size
+        print('Found ',n,' new regular faces')
+        # self.faces.nodes =np.empty((0,1),dtype=int)
+        self.faces.nodes     = [self.faces.nodes,self.F][1]
+        self.faces.neighbors = [self.faces.neighbors,np.transpose(np.vstack((self.c1,self.c2)))][1]
+        # self.arr1=np.diff(self.faces.nodePos.astype(float),axis=0),
+        self.arr=np.hstack((0,self.nF))
+        self.faces.nodePos   = np.cumsum(self.arr);
+        self.faces.tag        = [self.faces.tag,        np.zeros((n, 1))][1];
+        self.faces.cellTags   = [self.faces.cellTags,   np.tile(self.tag, (self.c1.size, 1))][1];
+
+
+    def findFaults(self):
+
+        print('findFaults')
+    def process_pillar_faces(self):
+        print('Processing regular faces')
+        self.findFaces()
+
+
+    def processGRDECL(self):
+        # Construct nodal coordinates  from pillars and ZCORN
+        # -> self.X,self.Y,self.Z
+        self.buildCornerPointNodes()
+        # Init Grid nodes,cells attributes
+        # Store indices in P to reconstruct all repeated point coords from unique points
+        # Store each cart Block/Cell unique Id in array B : lexico growing i,j,k
+        # -> self.nodes,self.cells,self.P,self.B
         self.createInitialGrid()
+
+        # Free X,Y,Z spaces
+        self.X,self.Y,self.Z=[],[],[]
+ 
+        # Process faces with constant i-index
+        self.tag=[1,2] #West East
+        self.process_pillar_faces()
+
+
+
 
     def LoadVar(self,Keyword,DataArray,DataSize):
         """Load varables into class
