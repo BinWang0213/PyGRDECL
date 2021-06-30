@@ -309,7 +309,7 @@ class GRDECL_Parser:
                 eta = y[:, :, k] / physDims[1];
                 z[:, :, k] = z[:, :, k] - 0.05*physDims[0]*fz(xi, eta);
             z = np.sort(z, 2);
-            z = physDims[2]* (z-z.min())/(z.max()-z.min())
+        z = physDims[2]*z#* (z-z.min())/(z.max()-z.min())
 
 
         # Create pillars
@@ -330,7 +330,7 @@ class GRDECL_Parser:
         def repInd(d):
             return np.linspace(1, 2*gridDims[d], 2*gridDims[d],dtype=int)//2
         IX, IY, IZ = repInd(0), repInd(1), repInd(2)
-
+        self.z=z
         self.ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
         for k in range(2 * self.NZ):
             for j in range(2 * self.NY):
@@ -602,14 +602,184 @@ class GRDECL_Parser:
         self.faces.tag        = [self.faces.tag,        np.zeros((n, 1))][1];
         self.faces.cellTags   = [self.faces.cellTags,   np.tile(self.tag, (self.c1.size, 1))][1];
 
+    def overlap(self, xa1, xa2, xb1, xb2):
+        # Do the intervals overlap?
+        #        xa1(               )xa2
+        # -----------------------------------
+        #  xb1(               )xb2
+        return max(xa1, xb1) < min(xa2, xb2)
+
+    def doIntersect(self,za1, za2, zb1, zb2):
+         #  Does cells given by points (a11,a12,a21,a22) and (b11,b12,b21,b22)
+         #  given along pillar (1) and pillar (2) have an nonzero intersection?
+         #  We need only the z-ccordinate to check:
+         #
+         #        |                 |
+         # zb1(1) *                 |
+         # za1(1) o-*---------------o za1(2)
+         #        |. .*             |
+         #        | . . *           |
+         #        |. . . .*         |
+         #        | . . . . *       |
+         # za2(1) o-----------*-----o za2(2)
+         #        |             *   |
+         #        |               * |
+         #        |                 * zb1(2)
+         #        |                 |
+         # zb2(1) * * * * * * * * * * zb2(2)
+         #        |                 |
+         #       (1)               (2)
+         val = self.overlap(za1[0], za2[0], zb1[0], zb2[0])  or \
+         self.overlap (za1[1], za2[1], zb1[1], zb2[1]) or  \
+         ( (za1[0]-zb1[0])*(za1[1]-zb1[1]) < 0 )  or  \
+         ( (za2[0]-zb2[0])*(za2[1]-zb2[1]) < 0 )
+         if np.all(za1-za2==0): val=False
+         if np.all(zb1-zb2==0): val=False
+
+
+
+
+
+    def findConnections(self,za,zb):
+        #           (1)                       (2)
+        #            |                         |
+        #  za(i+1,1) o-------------------------o za(i+1,2)
+        #            |                         |
+        #  zb(j+1,1) * * * *                   |
+        #            |       * * * *           |            ^
+        #            |               * * * *   |            |
+        #            |                       * * zb(j+1,2)  |z positive
+        #            |                         |            |
+        #            |                         |            |
+        #            |                         |
+        #    za(i,1) o-------------------------o za(i,2)
+        #            |                         |
+        #    zb(j,1) * * * * * * * *           |
+        #            |               * * * * * * zb(j,2)
+        #            |                         |
+        #
+        # Given:
+        # vectors of point numbers a and b where a(:,1), b(:,1) refer to pillar (1)
+        # and a(:,2), b(:,2) refer to pillar (2).
+        # Each cell a_i is assumed to lie between lines a(i,:) and a(i+1,:) and
+        # each cell b_j is assumed to lie between the lines b(j,:) and b(j+1,:).
+        # Walk along the stack of cells a_i  and find all connections to cell b_j.
+        C = np.zeros((0,2));
+        j1 = 0;
+        j2 = 0;
+        for i in range((za[:,0]).size-1):
+            j = min(j1, j2);  # Largest j where both
+                              # zb(j,1) < za(i,1) and
+                              # zb(j,2) < za(i,2)
+            # While  b(j,:) (bottom of cell b_j) is below a(i+1,:) (top of cella_i)
+            while np.any((zb[j,:] < za[i+1,:])):
+
+                print(i,np.any((zb[j,:] < za[i+1,:])))
+                # Update candidates for next start of j iteration
+                C = np.vstack((C,np.array([i, j]))); #ok
+                if zb[j,0] < za[i + 1, 0]: j1 = j
+                if zb[j,1] < za[i + 1, 1]: j2 = j
+                j = j + 1;
+                # Precise check to avoid adding pinched layers
+                # if  doIntersect(za(i,:), za(i+1,:), zb(j,:), zb(j+1,:)),
+        return C
+
 
     def findFaults(self):
-
         print('findFaults')
+        # Move z-coordinate to first index
+        self.P=self.P.transpose((2,0, 1))
+        self.B=self.B.transpose((2,0, 1))
+
+        szP = self.P.shape
+        szB = self.B.shape
+        di=szP[0];  # i step next index
+        dj=di * szP[1]  # j step next index
+        dk = 1  # k step next index
+        # first internal faces (West)
+        k = self.index(np.array(range(szP[0])), np.array(range(1, szP[1]-1, 2)),np.array(range(0,szP[2],2)),szP)
+        # Point numbers for faces on side A of pillar pairs
+        c1=self.P[np.unravel_index(k, self.P.shape, 'F')]
+        c2=self.P[np.unravel_index(k+dj, self.P.shape, 'F')]
+        self.a=np.ones((c1.size,2),dtype=int)
+        C=[c1,c2]
+        for i in range(2):
+            self.a[:,i]=C[i]
+        # Point numbers for faces on side B of pillar pairs
+        c1 = self.P[np.unravel_index(k+di, self.P.shape, 'F')]
+        c2 = self.P[np.unravel_index(k+di+dj, self.P.shape, 'F')]
+        self.b = np.ones((c1.size, 2),dtype=int)
+        C = [c1, c2]
+        for i in range(2):
+            self.b[:, i] = C[i]
+         # Cells associated with each face on side A and ond side B
+        k=self.index(np.array(range(szB[0])),np.array(range(szB[1]-1)),np.array(range(szB[2])),szB)
+        self.cA = self.B[np.unravel_index(k, self.B.shape, 'F')]
+        k=self.index(np.array(range(szB[0])),np.array(range(1,szB[1])),np.array(range(szB[2])),szB)
+        self.cB = self.B[np.unravel_index(k, self.B.shape, 'F')]
+
+        # if four point numbers of a match four point numbers of b, i.e., all
+        # a(2i-1:2i, :)==b(2j-1:2j,:), then cellsA(i) and cellsB(j) match exactly
+        # along a face.
+        #
+        # Below, we construct a logical vector that picks out all pillar pairs
+        # with ONLY MATCHING cells.
+        self.sz2  = sz2=[szP[0], szP[1]//2-1, szP[2]//2];
+        h=np.all(self.a==self.b,1)
+        h=np.all(h.reshape((sz2),order='F'),0)
+        h = np.repeat(h[np.newaxis,:, :], szP[0], axis=0)
+        print("Found %d faulted stacks\n" % (np.sum(~h)//szP[0]));
+        # Keep node numbers of faces that DO NOT match exactly
+        I_noth=self.I_noth=np.where(~h.reshape((h.size),order='F'))
+        self.a=self.a[I_noth,:][0,:,:]
+        self.b=self.b[I_noth,:][0,:,:]
+
+        # Keep stacks of cells with faces that DO NOT match exactly
+        I_noth2=np.where(~h.reshape((h.size),order='F')[::2])
+        self.cA=self.cA[I_noth2]
+        self.cB=self.cB[I_noth2]
+
+        # Make artificial z-increment to separate each stack completely in
+        # the next function call.
+        dz   = np.max(self.nodes.coords[:,2])-np.min(self.nodes.coords[:,2])+1;
+        auxz = (np.array(range(1,sz2[1]*sz2[2]+1))*dz).reshape([sz2[1],sz2[2]],order='F');
+        auxz =np.repeat(auxz[:,:,np.newaxis],szP[0],axis=2)
+        dZ   = auxz.transpose( [2,0,1]);
+        dZ2=dZ[np.unravel_index(I_noth, h.shape, 'F')]
+        self.dZ=np.repeat(dZ2.transpose(),2,axis=1)
+
+        # filter out inactive cells from c1 and c2 and faces belonging to inactive
+        # cells from a and b. Also, remove entries in dZ.
+        ind_a= self.actnum[np.unravel_index(np.repeat(self.cA,2), self.actnum.shape, 'F')];
+        ind_b= self.actnum[np.unravel_index(np.repeat(self.cB,2), self.actnum.shape, 'F')];
+        self.a = self.a[np.where(ind_a),:][0,:,:];
+        self.b = self.b[np.where(ind_b),:][0,:,:];
+        # self.cA=self.cA[np.where(self.actnum[self.cA]==1)]
+        # self.cB=self.cB[np.where(self.actnum[self.cB]==1)]
+        # dZZ=dZ[np.where(ind_a),0]
+        # dZa =np.repeat(dZ[np.where(ind_a),0],2,axis=1)
+        # dZb =np.repeat(dZ[np.where(ind_b),0],2,axis=1)
+        dZa=dZb=self.dZ
+        # Find z-coordinates + artificial z-increment of each point in a and b.
+        z    = self.nodes.coords[:,2];
+        za   = np.column_stack((z[self.a[:,0]],z[self.a[:,1]]))+dZa;
+        zb   = np.column_stack((z[self.b[:,0]],z[self.b[:,1]]))+dZb;
+        del z;
+
+        # Process connectivity across pillar pair, i.e., determine which faces
+        # b(2j-1:2j,:) on side B overlap with faces a(2i-1:2i, :) each face on side
+        # A. C returns index pair (2i,2j) for each cell-cell match and a (2i, 2j-1)
+        # of (2i-1,2j) pair for each cell-void match. These matches translate to
+        # cell connectivity and pieces of faces that are outer or internal
+        # boundaries.
+        C=self.findConnections(za,zb);
+        print('f')
+
+
     def process_pillar_faces(self):
         print('Processing regular faces')
         self.findFaces()
-
+        self.findFaults()
 
     def processGRDECL(self):
         # Construct nodal coordinates  from pillars and ZCORN
@@ -621,9 +791,9 @@ class GRDECL_Parser:
         # -> self.nodes,self.cells,self.P,self.B
         self.createInitialGrid()
 
-        # Free X,Y,Z spaces
-        self.X,self.Y,self.Z=[],[],[]
- 
+        # # Free X,Y,Z spaces
+        # self.X,self.Y,self.Z=[],[],[]
+
         # Process faces with constant i-index
         self.tag=[1,2] #West East
         self.process_pillar_faces()
