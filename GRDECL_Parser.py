@@ -49,11 +49,11 @@ class cells:
 
 class faces:
     def __init__(self):
-        self.nodes    = np.empty((0,1), int)
+        self.nodes    = np.empty((0,1), int)#next appending rows requires 0 in first dim
         self.nodePos  = np.empty((0,1), int)
-        self.neighbors= np.empty((0,1), int)
-        self.tag=[]
-        self.cellTags=[]
+        self.neighbors= np.empty((0,2), int)
+        self.tag=np.empty((0,1), int)
+        self.cellTags=np.empty((0,2), int)
 
 class GRDECL_Parser:
     def __init__(self,filename='',nx=0,ny=0,nz=0):
@@ -586,59 +586,22 @@ class GRDECL_Parser:
         self.f[self.f[:,0]==self.f[:,3], 0]=float("nan");
         self.f[self.f[:,1]==self.f[:,2], 0]=float("nan");
         self.F=np.reshape(np.hstack((self.f,float("inf")*np.ones((self.f.shape[0],1),dtype=float))),(-1,1))
-        self.nF=np.where(self.F==float("inf"))
-        self.nF=np.diff(np.hstack(([-1],self.nF[0])))-1
-        self.F=self.F[self.F!=float("inf")]
+        self.nF=np.where(self.F==float("inf"))[0]
+        self.nF=np.diff(np.hstack(([-1],self.nF)))-1
+        self.F=self.F[self.F[:,0]!=float("inf"),:]
 
         # Write results to grid srtucture
         n=self.c1.size
         print('Found ',n,' new regular faces')
         # self.faces.nodes =np.empty((0,1),dtype=int)
-        self.faces.nodes     = [self.faces.nodes,self.F][1]
-        self.faces.neighbors = [self.faces.neighbors,np.transpose(np.vstack((self.c1,self.c2)))][1]
+        self.faces.nodes     = np.vstack((self.faces.nodes,self.F))
+        self.faces.neighbors = np.vstack((self.faces.neighbors,np.column_stack((self.c1,self.c2))))
         # self.arr1=np.diff(self.faces.nodePos.astype(float),axis=0),
-        self.arr=np.hstack((0,self.nF))
+        self.arr=np.vstack((0,self.nF[:,np.newaxis]))
         self.faces.nodePos   = np.cumsum(self.arr);
-        self.faces.tag        = [self.faces.tag,        np.zeros((n, 1))][1];
-        self.faces.cellTags   = [self.faces.cellTags,   np.tile(self.tag, (self.c1.size, 1))][1];
-
-    def overlap(self, xa1, xa2, xb1, xb2):
-        # Do the intervals overlap?
-        #        xa1(               )xa2
-        # -----------------------------------
-        #  xb1(               )xb2
-        return max(xa1, xb1) < min(xa2, xb2)
-
-    def doIntersect(self,za1, za2, zb1, zb2):
-         #  Does cells given by points (a11,a12,a21,a22) and (b11,b12,b21,b22)
-         #  given along pillar (1) and pillar (2) have an nonzero intersection?
-         #  We need only the z-ccordinate to check:
-         #
-         #        |                 |
-         # zb1(1) *                 |
-         # za1(1) o-*---------------o za1(2)
-         #        |. .*             |
-         #        | . . *           |
-         #        |. . . .*         |
-         #        | . . . . *       |
-         # za2(1) o-----------*-----o za2(2)
-         #        |             *   |
-         #        |               * |
-         #        |                 * zb1(2)
-         #        |                 |
-         # zb2(1) * * * * * * * * * * zb2(2)
-         #        |                 |
-         #       (1)               (2)
-         val = self.overlap(za1[0], za2[0], zb1[0], zb2[0])  or \
-         self.overlap (za1[1], za2[1], zb1[1], zb2[1]) or  \
-         ( (za1[0]-zb1[0])*(za1[1]-zb1[1]) < 0 )  or  \
-         ( (za2[0]-zb2[0])*(za2[1]-zb2[1]) < 0 )
-         if np.all(za1-za2==0): val=False
-         if np.all(zb1-zb2==0): val=False
-
-
-
-
+        self.faces.tag        = np.vstack((self.faces.tag, np.zeros((n, 1))));
+        # self.faces.cellTags   = [self.faces.cellTags,   np.tile(self.tag, (self.c1.size, 1))][1];
+        self.faces.cellTags   = np.vstack((self.faces.cellTags, np.repeat(self.tag[np.newaxis,:], self.c1.size, axis=0)));
 
     def findConnections(self,za,zb):
         #           (1)                       (2)
@@ -664,19 +627,20 @@ class GRDECL_Parser:
         # Each cell a_i is assumed to lie between lines a(i,:) and a(i+1,:) and
         # each cell b_j is assumed to lie between the lines b(j,:) and b(j+1,:).
         # Walk along the stack of cells a_i  and find all connections to cell b_j.
-        C = np.zeros((0,2));
+        C = np.zeros((0,2),dtype=int);
         j1 = 0;
         j2 = 0;
-        for i in range((za[:,0]).size-1):
+        for i in range(za.shape[0]-1):
             j = min(j1, j2);  # Largest j where both
                               # zb(j,1) < za(i,1) and
                               # zb(j,2) < za(i,2)
             # While  b(j,:) (bottom of cell b_j) is below a(i+1,:) (top of cella_i)
             while np.any((zb[j,:] < za[i+1,:])):
+                # Precise check to avoid adding pinched layers
+                if doIntersect(za[i,:], za[i+1,:], zb[j,:], zb[j+1,:]):
+                    C = np.vstack((C, np.array([i, j])));
 
-                print(i,np.any((zb[j,:] < za[i+1,:])))
                 # Update candidates for next start of j iteration
-                C = np.vstack((C,np.array([i, j]))); #ok
                 if zb[j,0] < za[i + 1, 0]: j1 = j
                 if zb[j,1] < za[i + 1, 1]: j2 = j
                 j = j + 1;
@@ -684,6 +648,82 @@ class GRDECL_Parser:
                 # if  doIntersect(za(i,:), za(i+1,:), zb(j,:), zb(j+1,:)),
         return C
 
+    def intersection(self,La,Lb):
+        # Find coordinates of intersection between lines.
+        # Each row in La and Lb has two point numbers that are start and
+        # endpoints of line segments.  Point coordinates are specified in PTS.
+        # This function computes [x,y,z] of intersection between each line pair in
+        # La,Lb.
+        z  = self.nodes.coords[:,2];
+        za = np.reshape(z[La],La.shape,'F'); zb = np.reshape(z[Lb],Lb.shape,'F');
+        del z
+
+        # Find parameter t
+        t  = (zb[:,0]-za[:,0])/(np.diff(za)-np.diff(zb));
+        del zb;
+
+        x = self.nodes.coords[:,0];
+        xa = np.reshape(x[La],La.shape,'F'); xb = np.reshape(x[Lb],Lb.shape,'F');
+
+        y = self.nodes.coords[:,1];
+        ya = np.reshape(y[La],La.shape,'F'); yb = np.reshape(y[Lb],Lb.shape,'F');
+
+        # compute coordinates
+        pts=np.zeros((La.shape[0],3))
+        p0=pts[:,0]
+        xa0=xa[:,0]
+        dxa=t*np.diff(xa)[:]
+        pts[:,0]=xa[:,0]+t*np.diff(xa)
+        pts[:,1]=ya[:,0]+t*np.diff(ya)
+        pts[:,2]=za[:,0]+t*np.diff(za)
+
+
+        print('f')
+        return pts
+
+    def computeFaceGeometry(self,C):
+        pa=np.column_stack((self.a[C[:,0],:] , self.a[C[:,0]+1,:]))
+        pb=np.column_stack((self.b[C[:,1],:] , self.b[C[:,1]+1,:]))
+        n=pa.shape[0]
+        if (n<1):
+            numnodes=[]
+            Corners=[]
+        if np.all(np.all (pa==pb)):
+            numnodes = 4*np.ones((n,1),dtype=int)
+            Corners = np.reshape(pa,(-1,1),'F')
+        else:
+            # We only use z-coordinate of corners to determine intersections
+            z=self.nodes.coords[:,2]
+            az= np.reshape(z[pa],pa.shape,'F')
+            bz= np.reshape(z[pb],pb.shape,'F')
+            # Find possible points along each pillar: For each pair of cells, these
+            # are the min of upper cornes and the max of lower corners along each
+            # pillar
+            i = np.column_stack((az[:,:2] < bz[:,:2], az[:,2:] > bz[:,2:]))
+            I=np.copy(pa)
+            I[np.where(i)[:4]] = pb[np.where(i)[:4]];
+
+            # Are there intersections between upper and lower lines?
+            PP = np.vstack((pa[:, :2],pa[:, 2:],pa[:, :2],pa[:, 2:]))
+            QQ = np.vstack((pb[:, :2],pb[:, 2:],pb[:, :2],pb[:, 2:]))
+
+            i = (z[PP[:, 0]]-z[QQ[:, 0]] )*(z[PP[:, 1]]-z[QQ[:, 1]] )< 0;
+            # Qtemp=self.intersection(np.array([[0, 40]]), np.array([[119, 47]]));
+            Q = self.intersection(PP[np.where(i)[0],:], QQ[np.where(i)[0],:]);
+            del PP,QQ
+
+
+
+
+
+
+            print('f')
+
+
+
+
+
+        pa=np.column_stack((self.a[C[:,0],:] , self.a[C[:,0]+1,:]))
 
     def findFaults(self):
         print('findFaults')
@@ -699,19 +739,10 @@ class GRDECL_Parser:
         # first internal faces (West)
         k = self.index(np.array(range(szP[0])), np.array(range(1, szP[1]-1, 2)),np.array(range(0,szP[2],2)),szP)
         # Point numbers for faces on side A of pillar pairs
-        c1=self.P[np.unravel_index(k, self.P.shape, 'F')]
-        c2=self.P[np.unravel_index(k+dj, self.P.shape, 'F')]
-        self.a=np.ones((c1.size,2),dtype=int)
-        C=[c1,c2]
-        for i in range(2):
-            self.a[:,i]=C[i]
+        self.a=linear_ind_val_array(self.P,np.column_stack((k,k+dj)))
         # Point numbers for faces on side B of pillar pairs
-        c1 = self.P[np.unravel_index(k+di, self.P.shape, 'F')]
-        c2 = self.P[np.unravel_index(k+di+dj, self.P.shape, 'F')]
-        self.b = np.ones((c1.size, 2),dtype=int)
-        C = [c1, c2]
-        for i in range(2):
-            self.b[:, i] = C[i]
+        self.b=linear_ind_val_array(self.P,np.column_stack((k+di,k+di+dj)))
+
          # Cells associated with each face on side A and ond side B
         k=self.index(np.array(range(szB[0])),np.array(range(szB[1]-1)),np.array(range(szB[2])),szB)
         self.cA = self.B[np.unravel_index(k, self.B.shape, 'F')]
@@ -728,16 +759,15 @@ class GRDECL_Parser:
         h=np.all(self.a==self.b,1)
         h=np.all(h.reshape((sz2),order='F'),0)
         h = np.repeat(h[np.newaxis,:, :], szP[0], axis=0)
+        hvec=h.reshape((h.size),order='F')
         print("Found %d faulted stacks\n" % (np.sum(~h)//szP[0]));
         # Keep node numbers of faces that DO NOT match exactly
-        I_noth=self.I_noth=np.where(~h.reshape((h.size),order='F'))
-        self.a=self.a[I_noth,:][0,:,:]
-        self.b=self.b[I_noth,:][0,:,:]
+        self.a=self.a[np.where(~hvec)[0],:]
+        self.b=self.b[np.where(~hvec)[0],:]
 
         # Keep stacks of cells with faces that DO NOT match exactly
-        I_noth2=np.where(~h.reshape((h.size),order='F')[::2])
-        self.cA=self.cA[I_noth2]
-        self.cB=self.cB[I_noth2]
+        self.cA=self.cA[np.where(~hvec[::2])[0]]
+        self.cB=self.cB[np.where(~hvec[::2])[0]]
 
         # Make artificial z-increment to separate each stack completely in
         # the next function call.
@@ -745,25 +775,25 @@ class GRDECL_Parser:
         auxz = (np.array(range(1,sz2[1]*sz2[2]+1))*dz).reshape([sz2[1],sz2[2]],order='F');
         auxz =np.repeat(auxz[:,:,np.newaxis],szP[0],axis=2)
         dZ   = auxz.transpose( [2,0,1]);
-        dZ2=dZ[np.unravel_index(I_noth, h.shape, 'F')]
-        self.dZ=np.repeat(dZ2.transpose(),2,axis=1)
+        dZ=dZ[np.unravel_index(np.where(~hvec)[0], h.shape, 'F')]
+        dZ=np.repeat(dZ[:,np.newaxis],2,axis=1)
 
         # filter out inactive cells from c1 and c2 and faces belonging to inactive
         # cells from a and b. Also, remove entries in dZ.
         ind_a= self.actnum[np.unravel_index(np.repeat(self.cA,2), self.actnum.shape, 'F')];
         ind_b= self.actnum[np.unravel_index(np.repeat(self.cB,2), self.actnum.shape, 'F')];
-        self.a = self.a[np.where(ind_a),:][0,:,:];
-        self.b = self.b[np.where(ind_b),:][0,:,:];
-        # self.cA=self.cA[np.where(self.actnum[self.cA]==1)]
-        # self.cB=self.cB[np.where(self.actnum[self.cB]==1)]
-        # dZZ=dZ[np.where(ind_a),0]
-        # dZa =np.repeat(dZ[np.where(ind_a),0],2,axis=1)
-        # dZb =np.repeat(dZ[np.where(ind_b),0],2,axis=1)
-        dZa=dZb=self.dZ
+        self.a = self.a[np.where(ind_a)[0],:];
+        self.b = self.b[np.where(ind_b)[0],:];
+        self.cA=self.cA[np.where(self.actnum[np.unravel_index(self.cA, self.actnum.shape, 'F')]==1)[0]]
+        self.cB=self.cB[np.where(self.actnum[np.unravel_index(self.cB, self.actnum.shape, 'F')]==1)[0]]
+
+        dZa = dZ[np.where(ind_a)[0], :];
+        dZb = dZ[np.where(ind_b)[0], :];
+
         # Find z-coordinates + artificial z-increment of each point in a and b.
         z    = self.nodes.coords[:,2];
-        za   = np.column_stack((z[self.a[:,0]],z[self.a[:,1]]))+dZa;
-        zb   = np.column_stack((z[self.b[:,0]],z[self.b[:,1]]))+dZb;
+        za   = z[self.a]+dZa;
+        zb   = z[self.b]+dZb;
         del z;
 
         # Process connectivity across pillar pair, i.e., determine which faces
@@ -773,6 +803,23 @@ class GRDECL_Parser:
         # cell connectivity and pieces of faces that are outer or internal
         # boundaries.
         C=self.findConnections(za,zb);
+
+        #  Construct face-to-cell map NEW; each row corresponds to a face, each of
+        #  the two columns hold cell numbers.  Cell number zero mark outer/inner
+        #  boundary face
+
+        ka   = np.zeros((self.a.shape[0]-1,1),dtype=int)-1; ka[::2] = self.cA[:,np.newaxis];
+        kb   = np.zeros((self.b.shape[0]-1,1),dtype=int)-1; kb[::2] = self.cB[:,np.newaxis];
+        new  =np.column_stack((ka[C[:,0]], kb[C[:,1]]));
+        ind  = np.any(new!=-1, axis=1);  # Keep rows with at least one non-zero
+        new  = new[np.where(ind)[0], :];
+
+        self.faces.neighbors=np.vstack((self.faces.neighbors,new))
+        self.faces.cellTags   = np.vstack( ( self.faces.cellTags,   np.repeat(self.tag[np.newaxis,:], new.shape[0], axis=0) ) );
+
+        # Compute new node coordinates and geometry of the newly found faces
+        self.computeFaceGeometry(C[ind,:]);
+
         print('f')
 
 
@@ -795,7 +842,7 @@ class GRDECL_Parser:
         # self.X,self.Y,self.Z=[],[],[]
 
         # Process faces with constant i-index
-        self.tag=[1,2] #West East
+        self.tag=np.array([1,2]) #West East
         self.process_pillar_faces()
 
 
@@ -1360,7 +1407,47 @@ def getIJK(i,j,k,NX,NY,NZ):
     #Convert index [i,j,k] to a flat 3D matrix index [ijk]
     return i + (NX)*(j + k*(NY))
 
+
+
+def linear_ind_val_array(a,T):
+    ncol=T.shape[1]
+    out = np.ones(T.shape, dtype=int)
+    for i in range(ncol):
+        out[:, i] = a[np.unravel_index(T[:,i], a.shape, 'F')]
+    return out
+
+
+def doIntersect(za1, za2, zb1, zb2):
+     #  Does cells given by points (a11,a12,a21,a22) and (b11,b12,b21,b22)
+     #  given along pillar (1) and pillar (2) have an nonzero intersection?
+     #  We need only the z-ccordinate to check:
+     #
+     #        |                 |
+     # zb1(1) *                 |
+     # za1(1) o-*---------------o za1(2)
+     #        |. .*             |
+     #        | . . *           |
+     #        |. . . .*         |
+     #        | . . . . *       |
+     # za2(1) o-----------*-----o za2(2)
+     #        |             *   |
+     #        |               * |
+     #        |                 * zb1(2)
+     #        |                 |
+     # zb2(1) * * * * * * * * * * zb2(2)
+     #        |                 |
+     #       (1)               (2)
+
+    val = overlap (za1[0], za2[0], zb1[0], zb2[0]) or \
+          overlap (za1[1], za2[1], zb1[1], zb2[1]) or \
+          (za1[0]-zb1[0])*(za1[1]-zb1[1]) < 0     or \
+          (za2[0]-zb2[0])*(za2[1]-zb2[1]) < 0
+    if np.all(za1-za2==0): val=False
+    if np.all(zb1-zb2==0): val=False
+    return val
+
 def overlap(min1, max1, min2, max2):
     #Math: overlap of 1D segments
     #Reference: https://stackoverflow.com/questions/16691524/calculating-the-overlap-distance-of-two-1d-line-segments?rq=1
     return max(0.0, min(max1, max2) - max(min1, min2))
+
