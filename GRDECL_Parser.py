@@ -659,7 +659,7 @@ class GRDECL_Parser:
         del z
 
         # Find parameter t
-        t  = (zb[:,0]-za[:,0])/(np.diff(za)-np.diff(zb));
+        t  = np.divide( (zb[:,0]-za[:,0])[:,np.newaxis] , np.diff(za)-np.diff(zb) );
         del zb;
 
         x = self.nodes.coords[:,0];
@@ -670,12 +670,10 @@ class GRDECL_Parser:
 
         # compute coordinates
         pts=np.zeros((La.shape[0],3))
-        p0=pts[:,0]
-        xa0=xa[:,0]
-        dxa=t*np.diff(xa)[:]
-        pts[:,0]=xa[:,0]+t*np.diff(xa)
-        pts[:,1]=ya[:,0]+t*np.diff(ya)
-        pts[:,2]=za[:,0]+t*np.diff(za)
+        pts[:,0][:,np.newaxis]=xa[:,0][:,np.newaxis]+np.multiply(t,np.diff(xa))
+        pts[:,1][:,np.newaxis]=ya[:,0][:,np.newaxis]+np.multiply(t,np.diff(ya))
+        pts[:,2][:,np.newaxis]=za[:,0][:,np.newaxis]+np.multiply(t,np.diff(za))
+
 
 
         print('f')
@@ -689,8 +687,10 @@ class GRDECL_Parser:
             numnodes=[]
             Corners=[]
         if np.all(np.all (pa==pb)):
+            # All faces match exactly --> no faults here.
             numnodes = 4*np.ones((n,1),dtype=int)
-            Corners = np.reshape(pa,(-1,1),'F')
+            pa_tr=np.transpose(pa)
+            Corners = np.reshape(pa_tr,(-1,1),'F')
         else:
             # We only use z-coordinate of corners to determine intersections
             z=self.nodes.coords[:,2]
@@ -704,15 +704,85 @@ class GRDECL_Parser:
             I[np.where(i)[:4]] = pb[np.where(i)[:4]];
 
             # Are there intersections between upper and lower lines?
-            PP = np.vstack((pa[:, :2],pa[:, 2:],pa[:, :2],pa[:, 2:]))
-            QQ = np.vstack((pb[:, :2],pb[:, 2:],pb[:, :2],pb[:, 2:]))
+            # PP = np.vstack((pa[:, :2],pa[:, 2:],pa[:, :2],pa[:, 2:]))
+            # QQ = np.vstack((pb[:, :2],pb[:, 2:],pb[:, 2:],pb[:, :2]))
+            PP = np.vstack((np.column_stack((pb[:,0],pa[:,1])),pa[:, 2:],pa[:, :2],pa[:, 2:]))
+            QQ = np.vstack((np.column_stack((pa[:,0],pb[:,1])),pb[:, 2:],pb[:, 2:],pb[:, :2]))
 
             i = (z[PP[:, 0]]-z[QQ[:, 0]] )*(z[PP[:, 1]]-z[QQ[:, 1]] )< 0;
             # Qtemp=self.intersection(np.array([[0, 40]]), np.array([[119, 47]]));
-            Q = self.intersection(PP[np.where(i)[0],:], QQ[np.where(i)[0],:]);
-            del PP,QQ
+            if (np.sum(i*1) > -10):#If nb of intersection >0
+                # Compute intersection coordinates
+                Q = self.intersection(PP[np.where(i)[0],:], QQ[np.where(i)[0],:]);
+            else:
+                Q=np.empty((0,3))
+            Q, a, b = np.unique(Q, return_index=True, return_inverse=True, axis=0)
+
+            # Store pt nbs (IDs) of intersections in f.
+            # Each column of f represent a type of intersection:
+            # f(:,1)  -- A12 x B12  = p2
+            # f(:,2)  -- A34 x B34  = p6
+            # f(:,3)  -- A12 x B34  = p4 or p8
+            # f(:,4)  -- A34 x B12  = p4 or p8
+            f=np.ones((n,4))
+            f[:,:]=np.nan
+            # i[1]=True
+            size=np.where(i)[0].size
+            for i,ind in enumerate(np.where(i)[0]):
+                f[np.unravel_index(ind,f.shape,'F')]=b[i]+self.nodes.coords.shape[0]
+            del i,PP,QQ
+            # Add intersection pts to list
+            self.nodes.coords=np.vstack((self.nodes.coords,Q))
+            del Q
+
+            # Point numbers for each face are stored in rows of J.
+            # NaN is unassigned or deleted point
+            J=np.ones((n,8))
+            J[:,:]=np.nan
+
+            # Points on pillars that may be part of face (p1, p3, p5, p7)
+            # Just remove duplicate points first...
+            I=I.astype(float)
+            I[I[:,0]==I[:,2],0]=np.nan;
+            I[I[:,1]==I[:,3],1]=np.nan;
+            J[:,[0,2,4,6]]=I[:,[0,1,3,2]]
+            del I
+            # Assign bottom-bottom and top-top intersections. In essence, the upper
+            # and lower envelopes of each face are now stored in J.
+            J[:,1] = f[:,0]; # p2
+            J[:,5] = f[:,1]; # p6
 
 
+            intersect_botA_topB = np.isnan(f[:,2],where=False);     #  A12 x B34
+            intersect_topA_botB = np.isnan(f[:,3],where=False);  #  A34 x B12
+
+            intersect_left = az[:,0] > bz[:,2];
+
+            # Case 1
+            ind = intersect_botA_topB & intersect_left;
+            J[ind, 0] = J[ind, 6]  = np.nan;
+            J[ind, 7]      = f[ind,2]; # p8
+
+            # Case 2
+            ind = intersect_botA_topB & ~intersect_left;
+            J[ind, 2] = J[ind, 4]  = np.nan;
+            J[ind, 3]      = f[ind,2]; # p4
+
+            intersect_left = bz[:, 0] > az[:, 2];  # B12 > A34 on pillar 1
+
+            # Case 4
+            ind = intersect_topA_botB & intersect_left;
+            J[ind, 0] = J[ind, 6]  = np.nan;
+            J[ind, 7]      = f[ind,3]; # p8
+
+            # Case 3
+            ind = intersect_topA_botB & ~intersect_left;
+            J[ind, 2] = J[ind, 4]  = np.nan;
+            J[ind, 3]      = f[ind,3]; # p4
+
+            # Remove repeated points arising from pinch:
+            Corners  = np.ones((J.shape[0],1)) * float("Inf") ;
+            Corners = (np.hstack((J,Corners))).transpose()
 
 
 
