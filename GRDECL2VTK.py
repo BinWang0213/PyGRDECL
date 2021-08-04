@@ -77,6 +77,10 @@ class GeologyModel:
 
     def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt=None):
         #* Create simple corner point grid
+        OutputFilePath = "Results/"
+        Basefilename = "PILLAR_Grid"
+        FileExtension = "GRDECL"
+        self.fname = OutputFilePath + Basefilename + "." + FileExtension
         self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt)
 
     def create_coarse_model(self):
@@ -252,15 +256,17 @@ class GeologyModel:
         Author:Bin Wang(binwang.0213@gmail.com)
         Date: Feb. 2018
         """
-        assert varname not in self.GRDECL_Data.SpatialDatas, "     [Error] Variable [%s] is existed! Please use UpdateCellData function" %(varname)
+        if varname in self.GRDECL_Data.SpatialDatas:
+            print ("[CreateCellData] Cell variable %s already existing. Updating it"%(varname))
+            self.UpdateCellData(varname=varname,val=val,array=val_array)
 
         if(len(val_array)==0):
             self.GRDECL_Data.SpatialDatas[varname]=np.ones(self.GRDECL_Data.N)*val
-            print('     New variable [%s] created with a value of %lf!'%(varname,val))
+            print('[CreateCellData] New variable [%s] created with a value of %lf!'%(varname,val))
         else:
             assert len(val_array)==self.GRDECL_Data.N, print('     [Error] Input array is not compatible with number of cells!')
             self.GRDECL_Data.SpatialDatas[varname]=np.array(val_array)
-            print('     New variable [%s] created with a given array!'%(varname,val))
+            print('[CreateCellData] New variable [%s] created with a given array!'%(varname,val))
 
     def LoadCellData(self,varname="SW",filename="123.txt"):
         """Create a new data field and load from a file
@@ -276,6 +282,11 @@ class GeologyModel:
 
         return Data
 
+    def UpdateListCellData(self,var_list=[],array_list=[]):
+        assert len(var_list)==len(array_list),"[UpdateListCellData] PBM lists must have same lengths"
+        for i,var in enumerate(var_list):
+            print("[UpdateListCellData] varname:%s"%(var))
+            self.UpdateCellData(varname=var,array=array_list[i])
 
     def UpdateCellData(self,varname="PERMX",val=100.0,nx_range=(1,-1),ny_range=(1,-1),nz_range=(1,-1),array=[]):
         """Update/modify Cell data field (Permeability/Porosity) with given grid block range
@@ -503,7 +514,7 @@ class GeologyModel:
         return nz
 
     # MZ::Add TPFA Pressure calculation
-    def compute_TPFA_Pressure(self,Press_inj,direction,Fault_opt=None):
+    def compute_TPFA_Pressure(self,Press_inj=1,direction="i",Fault_opt=None):
         if "Pressure" not in self.GRDECL_Data.SpatialDatas:
             self.CreateCellData(varname="Pressure", val=1)
 
