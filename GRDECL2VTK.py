@@ -85,7 +85,7 @@ class GeologyModel:
         self.Upscaler.Coarse_Mod=GeologyModel()
         self.Upscaler.Coarse_Mod.fname = os.path.splitext(self.fname)[0] + '_Coarse' +  os.path.splitext(self.fname)[1]
         self.Upscaler.Coarse_Mod_Partition = self.GRDECL_Data.fill_coarse_grid(self.Upscaler.Coarse_Mod)
-        self.Upscale_Arithmetic_mean("PORO")
+        self.Upscaler.Upscale_Arithmetic_mean(self,"PORO")
         return self.Upscaler.Coarse_Mod
 
     def buildCornerPointNodes(self):
@@ -625,8 +625,20 @@ class GeologyModel:
         p = spsolve(A, q)
         self.UpdateCellData(varname="Pressure", array=p)
 
-    def Upscale_Arithmetic_mean(self, scalar):
-        self.Upscaler.Upscale_Arithmetic_mean(self, scalar)
+    def Upscale_Perm(self, upsc_methods):
+        Model2 = self.Upscaler.Coarse_Mod
+        if isinstance(upsc_methods, str):
+            upsc_methods = [upsc_methods]
+
+        scalars = ["PERMX", "PERMY", "PERMZ"]
+        if upsc_methods[0][-4:] == "mean":
+            if (len(upsc_methods)==1): upsc_methods *=3
+            for i, upsc_method in enumerate(upsc_methods):
+                method = "Upscale_" + upsc_method
+                scalar = scalars[i]
+                getattr(self.Upscaler, method)(self,scalar)
+        else:
+            getattr(self.Upscaler, "Upscale_" + upsc_methods[0])()
 
     def plot_scalar(self, scalar,ITK=True,ext='vtu'):
         try:
@@ -650,6 +662,39 @@ class GeologyModel:
             pl = pv.Plotter()
         pl.add_mesh(mesh, scalars=scalar)
         return pl
+
+    def two_plots_scalar(self, scalar,ext='vtu'):
+        try:
+            import pyvista as pv
+        except ImportError:
+            import warnings
+            warnings.warn("No vtk notebook viewer module pyvista loaded.")
+        import os
+
+        # 2Convert to vtk hexaedron based unstruct grid data
+        self.GRDECL2VTK()
+        # Write GRDECL cartesian model to vtk file
+        self.Write2VTU()
+
+        # 2Convert to vtk hexaedron based unstruct grid data
+        self.Upscaler.Coarse_Mod.GRDECL2VTK()
+        # Write GRDECL cartesian model to vtk file
+        self.Upscaler.Coarse_Mod.Write2VTU()
+
+        # Plot vtk data
+        filename1 = os.path.splitext(self.fname)[0] + '.' + ext
+        mesh1 = pv.read(filename1)
+        filename2 = os.path.splitext(self.Upscaler.Coarse_Mod.fname)[0] + '.' + ext
+        mesh2 = pv.read(filename2)
+
+        pl = pv.Plotter(shape=(1, 2),notebook=False)
+
+        pl.subplot(0, 0)
+        pl.add_mesh(mesh1, scalars=scalar,show_edges=True)
+        pl.subplot(0, 1)
+        pl.add_mesh(mesh2, scalars=scalar,show_edges=True)
+        return pl
+
 
     def plot_to_png(self,scalar,clim=[],title="",cbar_title="",outputname="",log_scale=False):
         try:
