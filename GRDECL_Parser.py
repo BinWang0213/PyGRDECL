@@ -375,6 +375,9 @@ class GRDECL_Parser:
             created += keyword + "***"
         print("       Created: Fields: %s" % created)
 
+    def fill_VOL(self):
+        self.VOL=self.DX*self.DY*self.DZ
+
     def fill_coarse_grid(self, CoarseMod):
         CoarseGrid = CoarseMod.GRDECL_Data
         CoarseGrid.GRID_type = self.GRID_type

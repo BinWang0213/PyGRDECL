@@ -249,7 +249,6 @@ class GeologyModel:
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
         self.AppendScalarData2VTK('SubVolumes',DomainMarker3D)
 
-
     def CreateCellData(self,varname="SW",val=0.0,val_array=[]):
         """Create a new data field
 
@@ -279,7 +278,6 @@ class GeologyModel:
             assert len(Data)==self.GRDECL_Data.N, print('     [Error] Input array is not compatible with number of cells!')
             self.GRDECL_Data.SpatialDatas[varname]=Data
             print('     New variable [%s] loaded from file!'%(varname))
-
         return Data
 
     def UpdateListCellData(self,var_list=[],array_list=[]):
@@ -336,7 +334,6 @@ class GeologyModel:
                                     val=array[ijk]
                                 self.GRDECL_Data.SpatialDatas[varname][ijk]=val
 
-
     def WriteNPSL(self):
         """Write the permeability/porosity field for NPSL
 
@@ -375,8 +372,6 @@ class GeologyModel:
             np.savetxt(fnames[-1],  self.GRDECL_Data.SpatialDatas['SW_NPSL'], delimiter="\n",fmt='%1.4f',header=header,comments="")
             print('NPSL file [%s] successfully genetrated, pelase use NPSL to load it!' % (fnames[-1]))
 
-
-
     def Write2VTU(self):
         basename=os.path.splitext(os.path.basename(self.fname))[0]
         if not os.path.exists("Results"):
@@ -409,9 +404,6 @@ class GeologyModel:
         writer.SetInputData(polydata)
         writer.Write()
         print("vtp file created.")
-
-
-
 
     def AppendScalarData2VTK(self,name,numpy_array):
         #* Append scalar cell data (numpy array) into vtk object, should not directly called by user
