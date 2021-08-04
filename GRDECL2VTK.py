@@ -58,6 +58,11 @@ class GeologyModel:
 
         self.VTK_Grids=None
 
+        # MZ: Pointers to coarse and local models for upscaling
+        self.Coarse_Mod=None
+        self.Coarse_Mod_Partition=[]
+        self.local_Mod=None
+
         if(self.fname!=''):
             self.GRDECL_Data=GRDECL_Parser(self.fname)
 
@@ -70,12 +75,21 @@ class GeologyModel:
         #* Create simple cartesian grid
         self.GRDECL_Data.buildCartGrid(physDims,gridDims)
 
-    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False},faultDrop=0.):
+    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt=None):
         #* Create simple corner point grid
-        self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt,faultDrop)
+        self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt)
+
+    def create_coarse_model(self):
+        self.Coarse_Mod=GeologyModel()
+        self.Coarse_Mod.fname = os.path.splitext(self.fname)[0] + '_Coarse' +  os.path.splitext(self.fname)[1]
+        self.Coarse_Mod_Partition = self.GRDECL_Data.fill_coarse_grid(self.Coarse_Mod)
+        return self.Coarse_Mod
 
     def buildCornerPointNodes(self):
         self.GRDECL_Data.buildCornerPointNodes()
+
+    def buildDXDYDZTOPS(self):
+        self.GRDECL_Data.buildDXDYDZTOPS()
 
     def processGRDECL(self):
         self.GRDECL_Data.processGRDECL()
@@ -432,6 +446,288 @@ class GeologyModel:
         f.close()
         print("...done")
 
+    def compute_bdry_indices(self,direction):
+        Grid=self.GRDECL_Data
+        Min_ind=[];        Max_ind=[]
+        rangeX=range(Grid.NX);        rangeY=range(Grid.NY);        rangeZ=range(Grid.NZ)
+        if (direction=="ijk"):
+            Min_ind=[0]
+            Max_ind=[Grid.N-1]
+        else:
+            # Min
+            if (direction == "i"):
+                rangeX = [0]
+            if (direction == "j"):
+                rangeY = [0]
+            if (direction == "k"):
+                rangeZ = [0]
+            for k in rangeZ:
+                for j in rangeY:
+                    for i in rangeX:
+                        Min_ind.append(i+Grid.NX*(j+k*Grid.NY))
+
+            # Max
+            if (direction == "i"):
+                rangeX = [Grid.NX-1]
+            if (direction == "j"):
+                rangeY = [Grid.NY-1]
+            if (direction == "k"):
+                rangeZ = [Grid.NZ-1]
+            for k in rangeZ:
+                for j in rangeY:
+                    for i in rangeX:
+                        Max_ind.append(i+Grid.NX*(j+k*Grid.NY))
+        return  Min_ind,Max_ind
+
+    def nz_to_fault(self,ix):
+        nz=0
+        Grid=self.GRDECL_Data
+        Nx = Grid.NX;        Ny = Grid.NY;        Nz = Grid.NZ
+        # Index step to KIll or ADD transmissibily on fault
+        # ix = Nx // 2 - 1
+        # ix-=1
+        self.GRDECL_Data.ZCORN = (self.GRDECL_Data.ZCORN).reshape((2 * Nx, 2 * Ny, 2 * Nz), order='F')
+        for iz in range(Nz):
+            iz_opp = Nz - 1 - iz
+            # for iy in range(1):
+            h1_up = self.GRDECL_Data.ZCORN[2 * ix + 1, 0, 2 * iz + 1]
+            h2_min = np.min(self.GRDECL_Data.ZCORN[2 * ix + 2, 0, :])
+            # if h1_up > h2_min:
+            #     break
+            if h1_up > h2_min:
+                nz=iz
+                print("iz:",iz)
+                break
+        self.GRDECL_Data.ZCORN = (self.GRDECL_Data.ZCORN).reshape((8*self.GRDECL_Data.N), order='F')
+
+        return nz
+
+    # MZ::Add TPFA Pressure calculation
+    def compute_TPFA_Pressure(self,Press_inj,direction,Fault_opt=None):
+        if "Pressure" not in self.GRDECL_Data.SpatialDatas:
+            self.CreateCellData(varname="Pressure", val=1)
+
+        mDarcy=9.869233e-16;
+        Grid=self.GRDECL_Data
+        import scipy.sparse as SP
+        from scipy.sparse.linalg import spsolve
+        Nx = Grid.NX;        Ny = Grid.NY;        Nz = Grid.NZ
+        assert((Nx>1) and (Ny>1) and (Nz>1)),"TPFA not able to run for NX,NY,NZ<=1"
+        N = Nx * Ny * Nz
+        self.buildDXDYDZTOPS()
+        Dx = Grid.DX;        Dy = Grid.DY;        Dz = Grid.DZ
+
+
+        if Fault_opt is None:
+            faultDrop=False
+        else:
+            faultDrop=True
+
+        # q = 0 * np.ones_like(Dx)
+        q =  np.zeros_like(Dx)
+        Dx = Dx.reshape((Nx, Ny, Nz), order='F')
+        Dy = Dy.reshape((Nx, Ny, Nz), order='F')
+        Dz = Dz.reshape((Nx, Ny, Nz), order='F')
+
+        # Inverse K values stored in L
+        # K = np.ones_like(K)
+        KX=Grid.SpatialDatas["PERMX"].reshape((Nx,Ny,Nz),order='F')*mDarcy
+        KY=Grid.SpatialDatas["PERMY"].reshape((Nx,Ny,Nz),order='F')*mDarcy
+        KZ=Grid.SpatialDatas["PERMZ"].reshape((Nx,Ny,Nz),order='F')*mDarcy
+        # invK = K ** (-1);  # np.ones_like(K);
+        DxinvK = Dx/KX
+        DyinvK = Dy/KY
+        DzinvK = Dz/KZ
+
+        Ord = 'F'
+
+        # Initialize transmissibilities
+        # Interface area and distance to it
+        Areax = Dy * Dz;        Areay = Dx * Dz;        Areaz = Dy * Dx;
+        TX = np.zeros((Nx + 1, Ny, Nz));
+        TY = np.zeros((Nx, Ny + 1, Nz));
+        TZ = np.zeros((Nx, Ny, Nz + 1));
+
+        TX[1:Nx, :, :] = 2 *Areax[0:Nx - 1, :, :]/ \
+                         (DxinvK[0:Nx - 1, :, :] + DxinvK[1:Nx, :, :])  # no contrib TX in xmin xmax
+        TY[:, 1:Ny, :] = 2 * Areay[:, 0:Ny - 1, :]/ \
+                         (DyinvK[:, 0:Ny - 1, :] + DyinvK[:, 1:Ny, :])  # no contrib TY in ymin ymax
+        TZ[:, :, 1:Nz] = 2 * Areaz[:, :, 0:Nz - 1]/ \
+                         (DzinvK[:, :, 0:Nz - 1] + DzinvK[:, :, 1:Nz])  # no contrib TZ in zmin zmax
+
+        # Assembling
+        x1 = TX[0:Nx, :, :].reshape((N), order=Ord);
+        x2 = TX[1:Nx + 1, :, :].reshape((N), order=Ord)
+        y1 = TY[:, 0:Ny, :].reshape((N), order=Ord);
+        y2 = TY[:, 1:Ny + 1, :].reshape((N), order=Ord)
+        z1 = TZ[:, :, 0:Nz].reshape((N), order=Ord);
+        z2 = TZ[:, :, 1:Nz + 1].reshape((N), order=Ord)
+
+        # Modify transmissibily on fault
+        nz=0
+        xfault1 = np.zeros_like(x1)
+        xfault2 = np.zeros_like(x1)
+        if faultDrop:
+            ix = self.GRDECL_Data.fault_nx-1
+            nz = self.nz_to_fault(ix)
+        if faultDrop and nz>0:
+            # Kill i+-1 transmissibily on fault
+            for iz in range(Nz):
+                for iy in range(Ny):
+                    iglob=ix+Nx*(iy+Ny*iz)
+                    iglob_vois=ix+1+Nx*(iy+Ny*iz)
+                    x1[iglob_vois]=0
+                    x2[iglob]=0
+            # Add displaced by fault transmissibilty values
+            for iz in range(nz,Nz):
+                iz_vois=iz-nz
+                for iy in range(Ny):
+                    iglob=ix+Nx*(iy+Ny*iz)
+                    iglob_vois=ix+1+Nx*(iy+Ny*iz_vois)
+                    DxinvK=Dx[ix,iy,iz]*(1./KX[ix,iy,iz]+1./KX[ix+1,iy,iz_vois])
+                    contrib_fault=2*Areax[ix,iy,iz]/DxinvK
+                    xfault1[iglob]     = contrib_fault
+                    xfault2[iglob_vois]= contrib_fault
+            decfault=1-nz*(Nx*Ny)
+        if (nz==1):#Fault New diagonal already in x1 and x2
+            x1+=xfault1
+            x2+=xfault2
+
+        diagonals = np.zeros((7, N))
+        diagonals[0, 0:N] = -z2;
+        diagonals[1, 0:N] = -y2;
+        diagonals[2, 0:N] = -x2;
+        diagonals[3, 0:N] = x1 + x2 + y1 + y2 + z1 + z2+xfault1+xfault2;
+        diagonals[4, 0:N] = -x1;
+        diagonals[5, 0:N] = -y1;
+        diagonals[6, 0:N] = -z1;
+
+        decs = [-Ny * Nx, -Nx, -1, 0, 1, Nx, Ny * Nx]
+
+        if faultDrop and nz>1:
+            diagonals=np.vstack((diagonals, -xfault1));
+            diagonals=np.vstack((diagonals, -xfault2));
+            # dec.append(-nz*Nx*Ny)
+            # dec.append( nz*Nx*Ny)
+            decs.append(-decfault)
+            decs.append( decfault)
+
+        Min_ind,Max_ind=self.compute_bdry_indices(direction)
+        set_dirichlet(N, diagonals, decs, q,Min_ind,  0)
+        set_dirichlet(N, diagonals, decs, q, Max_ind, Press_inj)
+
+        # A = SP.spdiags(diagonals, dec, N, N, format='lil')
+        A = SP.spdiags(diagonals, decs, N, N)
+        A = A.tocsc()
+        # print("start spsolve")
+        p = spsolve(A, q)
+        self.UpdateCellData(varname="Pressure", array=p)
+
+    def plot_scalar(self, scalar,ITK=True,ext='vtu'):
+        try:
+            import pyvista as pv
+        except ImportError:
+            import warnings
+            warnings.warn("No vtk notebook viewer module pyvista loaded.")
+        import os
+
+        # 2Convert to vtk hexaedron based unstruct grid data
+        self.GRDECL2VTK()
+        # Write GRDECL cartesian model to vtk file
+        self.Write2VTU()
+
+        # Plot vtk data
+        filename = os.path.splitext(self.fname)[0] + '.' + ext
+        mesh = pv.read(filename)
+        if ITK:
+            pl = pv.PlotterITK()
+        else:
+            pl = pv.Plotter()
+        pl.add_mesh(mesh, scalars=scalar)
+        return pl
+
+    def plot_to_png(self,scalar,clim=[],title="",cbar_title="",outputname="",log_scale=False):
+        try:
+            import pyvista as pv
+        except ImportError:
+            import warnings
+            warnings.warn("No vtk notebook viewer module pyvista loaded.")
+        import os
+        # 2Convert to vtk hexaedron based unstruct grid data
+        self.GRDECL2VTK()
+        # Write GRDECL cartesian model to vtk file
+        self.Write2VTU()
+
+        # Plot vtk data
+        filename = os.path.splitext(self.fname)[0] + '.vtu'
+        mesh = pv.read(filename)
+        pv.set_plot_theme('document') #white background
+
+        pl = pv.Plotter(off_screen=True)
+        pl.add_mesh(mesh,log_scale=log_scale, \
+                    scalars=scalar, cmap="cet_CET_R3",  clim=clim,show_edges=True)
+
+        pl.add_text(title,viewport=True,position=[0.12,0.78])
+        pl.remove_scalar_bar()
+        pl.add_scalar_bar(title=cbar_title, title_font_size=20,position_y=0.01)
+        outputname="Results/"+outputname+".png"
+        pl.screenshot(outputname)
+
+    def plot_scalar_to_png(self,scalar,upsc_meth="Fine_scale",dirname=""):
+        if upsc_meth=="Fine_scale":
+            title = "Fine scale " + scalar
+        else:
+            title = upsc_meth +" " +scalar
+
+        if scalar == "Pressure":
+            cbar_title = "P (Pa)"
+            clim = [0, 1]
+        else:
+            cbar_title = scalar + " mD"
+            clim = [10, 1000]
+        outputname = dirname+"/"+upsc_meth+"_" + scalar
+        self.plot_to_png(scalar, clim=clim,log_scale=(scalar != "Pressure"),\
+                         title=title, cbar_title=cbar_title, outputname=outputname)
+
+
+    def plot_fine_and_coarse_(self,Coarse_Mod, ext='vtu'):
+        try:
+            import pyvista as pv
+        except ImportError:
+            import warnings
+            warnings.warn("No vtk notebook viewer module pyvista loaded.")
+        import os
+
+        # 2Convert to vtk hexaedron based unstruct grid data
+        self.GRDECL2VTK()
+        # Write GRDECL cartesian model to vtk file
+        self.Write2VTU()
+
+        # 2Convert to vtk hexaedron based unstruct grid data
+        Coarse_Mod.GRDECL2VTK()
+        # Write GRDECL cartesian model to vtk file
+        Coarse_Mod.Write2VTU()
+
+        # Plot vtk data
+        filename = os.path.splitext(self.fname)[0] + '.' + ext
+        fmesh = pv.read(filename)
+        filename = os.path.splitext(Coarse_Mod.fname)[0] + '.' + ext
+        cmesh = pv.read(filename)
+
+        pv.set_plot_theme('document')  # white background
+        pl = pv.Plotter(notebook=False)
+        pl.add_mesh(cmesh,show_edges=True,color="tan")
+        pl.increment_point_size_and_line_width(3)
+        pl.add_mesh(fmesh,show_edges=True,color="tan")
+        return pl
+
+    def export_to_vtk(self,ind,direction="i",opt=None):
+        fname1= self.fname[-8:]
+        self.fname=self.fname.replace(fname1,str(ind)+self.fname[-7:])
+
+        self.compute_TPFA_Pressure(Press_inj=1,direction=direction,Fault_opt=opt)
+        G,V=self.computeGradP_V()
+        ITK_plotter2=self.plot_scalar("PERMX")
 #####################################################################
 # MZ::GRDECL cartesian writer functions
 # MZ::Write spatial data at a specified output format:
@@ -474,7 +770,14 @@ def merge_duplicates_forGRDECL(linestring):
         new_str += group[0] + " "
     return new_str
 
-
+def set_dirichlet(N,diagonals, decs,q, List_ind, value):
+    ind0=decs.index(0)
+    for ind in List_ind:
+        for i,dec in enumerate(decs):
+            if (ind+dec>=0) and (ind+dec<N):
+                diagonals[i,ind+dec]=0
+            diagonals[ind0, ind] = 1
+        q[ind] = value;
 
 
 

@@ -18,7 +18,7 @@ SupportKeyWords=[
     'SPECGRID', #Dimenion of the corner point grid
     'DIMENS',   #Define the dimension of the cartesian grid
     'TOPS','DX','DY','DZ',
-    'COORD','ZCORN','ACTNUM'
+    'COORD','ZCORN','ACTNUM',
     'PORO',
     'PERMX' , 'PERMXY', 'PERMXZ', 
     'PERMYX', 'PERMY' , 'PERMYZ', 
@@ -30,12 +30,20 @@ KeyWordsDatatypes=[#Corrsponding data types
     int,
     float,
     int,int,int,int,
-    float,float,
+    float,float,float,
     float,
     float,float,float,
     float,float,float,
-    float,float,float
+    float,float,float,
+    float
 ]
+
+class buildCPGGrid_opt:
+    def __init__(self,disturbed=True,flat= False,fault_drop = 0.,fault_nx = 2):
+        self.disturbed= disturbed
+        self.flat= flat
+        self.fault_drop = fault_drop
+        self.fault_nx = fault_nx
 
 class nodes:
     def __init__(self):
@@ -94,6 +102,14 @@ class GRDECL_Parser:
         self.nodes=nodes()
         self.cells=cells()
         self.faces=faces()
+
+        # Upscaling and block centered fluid simulation fields
+        self.fault_nx=0  #localize simlplegrdecl fault
+        self.VOL=[]
+        self.coarse2fine_ratio=[1,1,1]
+        self.Rx=[]
+        self.Ry=[]
+        self.Rz=[]
 
         #Petrophysics data Keywords
         self.SpatialDatas={}
@@ -224,7 +240,6 @@ class GRDECL_Parser:
                         ijk_next=getIJK(i,j,k+1,self.NX,self.NY,self.NZ)
                         self.TOPS[ijk_next] = self.TOPS[ijk] + self.DZ[ijk]
     
-
     def buildCartGrid(self,physDim=[100.0,100.0,10.0],gridDims=[10,10,1]):
         """Build simple cartesian grid 
         
@@ -263,8 +278,7 @@ class GRDECL_Parser:
         self.SpatialDatas["PERMZ"]=np.ones(self.N)*10.0
         self.SpatialDatas["PORO"]=np.ones(self.N)*0.3
 
-
-    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3],opt={'disturbed':True,'flat':False},faultDrop=0.):
+    def buildCPGGrid(self, physDims=[1.0, 1.0, 0.5], gridDims=[3, 3, 3], opt=None):
         """Build simple corner point grid
         Arguments
         ---------
@@ -282,44 +296,49 @@ class GRDECL_Parser:
         self.NX, self.NY, self.NZ = gridDims
         self.N = self.NX * self.NY * self.NZ
         self.GRID_type = 'CornerPoint'
+        if opt is None:   opt = buildCPGGrid_opt()
+        # Correct fault_nx to align with coarse grid
+        self.fault_nx = (opt.fault_nx // self.coarse2fine_ratio[0]) * self.coarse2fine_ratio[0]
 
-        print("     Grid Type=%s Grid" % (self.GRID_type))
-        print("     Grid Dimension(NX,NY,NZ): (%s x %s x %s)" % (self.NX, self.NY, self.NZ))
-        print("     NumOfGrids=%s" % (self.N))
+        print("     Creating Grid:")
+        print("       Type: %s Grid" % (self.GRID_type))
+        print("       Grid Dimensions (NX,NY,NZ): (%s x %s x %s)" % (self.NX, self.NY, self.NZ))
+        print("       Number Of Grid Cells: %s" % (self.N))
 
         # Create x,y,z vectors. Disturb x,z
-        x_= np.linspace(0, physDims[0], self.NX + 1)
-        y_= np.linspace(0, physDims[1], self.NY + 1)
-        z_= np.linspace(0, physDims[2], self.NZ + 1)
+        x_ = np.linspace(0, physDims[0], self.NX + 1)
+        y_ = np.linspace(0, physDims[1], self.NY + 1)
+        z_ = np.linspace(0, physDims[2], self.NZ + 1)
         x, y, z = np.meshgrid(x_, y_, z_, indexing='ij')
 
-        if (opt['disturbed']):
+        if (opt.disturbed):
             # skew pillars
-            xmid=x[self.NX//2,0,0];
-            zmid=z[0,0,self.NZ//2];
-            x = x +3*0.05* (xmid - abs(x - xmid)) * (z - physDims[2])/physDims[2];#disturb more nead xmid and zmax
-            x = physDims[0] * x/x.max()#rescale
-        if (not opt['flat']):
+            xmid = x[self.NX // 2, 0, 0];
+            zmid = z[0, 0, self.NZ // 2];
+            x = x + 3 * 0.025 * (xmid - abs(x - xmid)) * (z - physDims[2]) / physDims[
+                2];  # disturb more nead xmid and zmax
+            x = physDims[0] * x / x.max()  # rescale
+        if (not opt.flat):
             # add sinusoidal variations for z
             def fz(x, y):
-                z =  np.sin(math.pi * x) + 0.5*np.sin(math.pi * (y +2*x));
+                z = np.sin(math.pi * x) + 0.5 * np.sin(1.5 * math.pi * (y + x));
                 return z
-            for k in range(gridDims[2]+1):
+
+            for k in range(gridDims[2] + 1):
                 xi = x[:, :, k] / physDims[0];
                 eta = y[:, :, k] / physDims[1];
-                z[:, :, k] = z[:, :, k] - 0.05*physDims[0]*fz(xi, eta);
+                z[:, :, k] = z[:, :, k] + 1.5 * 0.05 * physDims[0] * fz(xi, eta);
             z = np.sort(z, 2);
-        z = physDims[2]*z#* (z-z.min())/(z.max()-z.min())
-
+        z = physDims[2] * (z - z.min()) / (z.max() - z.min())
 
         # Create pillars
-        npillar = (self.NX + 1)*(self.NY + 1)
+        npillar = (self.NX + 1) * (self.NY + 1)
         ## Each pillar bottom & top xyz COORD (6 coordinates)
         lines = np.zeros((npillar, 6));
         ## Set columns Bottom/Top (z[0]/z[end]) coordinates: xB yB zB xT yT zT
         for i, V in enumerate([x, y, z]):
-            lines[:, i + 0] = V[:, :,  0].reshape((npillar), order='F');      #Bottom:iz=0
-            lines[:, i + 3] = V[:, :, -1].reshape((npillar), order='F'); #Top:iz=lastindex=-1
+            lines[:, i + 0] = V[:, :, 0].reshape((npillar), order='F');  # Bottom:iz=0
+            lines[:, i + 3] = V[:, :, -1].reshape((npillar), order='F');  # Top:iz=lastindex=-1
         ## flatten lines to create COORD
         self.COORD = lines.reshape((np.prod(lines.size)))
 
@@ -328,9 +347,10 @@ class GRDECL_Parser:
         ## 0,    1,1,       2,2,   ... ,gridDims(d)-1,gridDims(d)-1, gridDims(d)
         ## 0, 2//2,3//2, 4//2,5//2,... ,                           ,2*gridDims(d)//2
         def repInd(d):
-            return np.linspace(1, 2*gridDims[d], 2*gridDims[d],dtype=int)//2
+            return np.linspace(1, 2 * gridDims[d], 2 * gridDims[d], dtype=int) // 2
+
         IX, IY, IZ = repInd(0), repInd(1), repInd(2)
-        self.z=z
+        self.z = z
         self.ZCORN = np.zeros((2 * self.NX, 2 * self.NY, 2 * self.NZ), dtype=float)
         for k in range(2 * self.NZ):
             for j in range(2 * self.NY):
@@ -339,8 +359,8 @@ class GRDECL_Parser:
 
         # Add a fault drop after half the x range: (odd index)
         ## [0, 1],[2, 3],4, ... ,2*(gridDims(d)-1)],[2*gridDims(d)-1, 2*gridDims(d)]
-        iFault=self.NX//2
-        self.ZCORN[2*iFault:,:,:]+=faultDrop
+        iFault = self.fault_nx  # self.NX//2
+        self.ZCORN[2 * iFault:, :, :] += opt.fault_drop
 
         # flatten ZCORN
         self.ZCORN = self.ZCORN.reshape((np.prod(self.ZCORN.size)), order='F')
@@ -350,51 +370,99 @@ class GRDECL_Parser:
         self.SpatialDatas["PERMY"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PERMZ"] = np.ones(self.N) * 10.0
         self.SpatialDatas["PORO"] = np.ones(self.N) * 0.3
+        created = "***"
+        for keyword, data in self.SpatialDatas.items():
+            created += keyword + "***"
+        print("       Created: Fields: %s" % created)
 
-    def buildCornerPointNodes(self):
+    def fill_coarse_grid(self, CoarseMod):
+        CoarseGrid = CoarseMod.GRDECL_Data
+        CoarseGrid.GRID_type = self.GRID_type
+        [rx, ry, rz] = self.coarse2fine_ratio
+        Nx = self.NX
+        Ny = self.NY
+        Nz = self.NZ
+        ix = self.fault_nx
+
+        # Define ratios
+        # For Rx cut at fault index ix
+        self.Rx = coarse_sizes_vect(ix, rx)
+        CoarseGrid.fault_nx = len(self.Rx)
+        self.Rx += coarse_sizes_vect(Nx - ix, rx, inv=True)
+
+        self.Ry = coarse_sizes_vect(Ny, ry)
+        self.Rz = coarse_sizes_vect(Nz, rz)
+
+        # Assign Coarse grid dimensions
+        CoarseGrid.NX = len(self.Rx)
+        CoarseGrid.NY = len(self.Ry)
+        CoarseGrid.NZ = len(self.Rz)
+        CoarseGrid.N = CoarseGrid.NX * CoarseGrid.NY * CoarseGrid.NZ
+
+        # Create partitioning indices
+        P0 = self.create_partition_indices(CoarseGrid)
+
+        # Assign GRDECL cartesian attributes DX,DY,DZ,TOPS,VOL to coarse grid
+        if self.GRID_type == 'CornerPoint':
+            self.buildDXDYDZTOPS()
+        self.fill_VOL()
+        self.fill_coarse_grdecl_DXDYDZTOPS(CoarseGrid)
+
+        # Assign coarse COORD and ZCORN attributes
+        if self.GRID_type == 'CornerPoint':
+            self.fill_coarse_grdecl_COORD_ZCORN(CoarseGrid)
+
+        # Build up basic spatial propertis
+        CoarseGrid.SpatialDatas["PERMX"] = np.ones(CoarseGrid.N) * 10.0
+        CoarseGrid.SpatialDatas["PERMY"] = np.ones(CoarseGrid.N) * 10.0
+        CoarseGrid.SpatialDatas["PERMZ"] = np.ones(CoarseGrid.N) * 10.0
+        CoarseGrid.SpatialDatas["PORO"] = np.ones(CoarseGrid.N) * 0.3
+        return P0
+
+    def buildCornerPointNodes(self, addZlayers=True):
         # Construct nodal coordinates for Corner Point Grid
         nx, ny, nz = self.NX, self.NY, self.NZ
-        ncell=nx*ny*nz
+        ncell = nx * ny * nz
         npillar = (nx + 1) * (ny + 1)
 
         # Enumerate pillars in grid associate one pillar per node
         # Id from  reshaping of [1 2 3 ... npillar] (column major Fortran ordering 11,21,12,22)
-        pillarId = (np.linspace(1, npillar, npillar,dtype=int)).reshape((nx + 1, ny + 1), order='F')
-        pillarId-=1
+        pillarId = (np.linspace(1, npillar, npillar, dtype=int)).reshape((nx + 1, ny + 1), order='F')
+        pillarId -= 1
 
         # Assign separately 4 pillar Ids per cell 00,10,01,11
-        p1 = pillarId[0:nx  ,0:ny];
-        p2 = pillarId[1:nx+1,0:ny];
-        p3 = pillarId[0:nx  ,1:ny+1];
-        p4 = pillarId[1:nx+1,1:ny+1];
+        p1 = pillarId[0:nx, 0:ny];
+        p2 = pillarId[1:nx + 1, 0:ny];
+        p3 = pillarId[0:nx, 1:ny + 1];
+        p4 = pillarId[1:nx + 1, 1:ny + 1];
         del pillarId;
         # Assign 4 pillar Ids per cell (with repetitions) and vector reshape it
-        lineID=np.zeros((2*nx,2*ny,2*nz),dtype=int)
-        for k in range(2*nz):
-            lineID[0:2*nx:2, 0:2*ny:2,k] = p1;
-            lineID[1:2*nx:2, 0:2*ny:2,k] = p2;
-            lineID[0:2*nx:2, 1:2*ny:2,k] = p3;
-            lineID[1:2*nx:2, 1:2*ny:2,k] = p4;
-            lineID2=lineID.reshape((8*ncell),order='F')
-        del lineID,p1,p2,p3,p4;
+        lineID = np.zeros((2 * nx, 2 * ny, 2 * nz), dtype=int)
+        for k in range(2 * nz):
+            lineID[0:2 * nx:2, 0:2 * ny:2, k] = p1;
+            lineID[1:2 * nx:2, 0:2 * ny:2, k] = p2;
+            lineID[0:2 * nx:2, 1:2 * ny:2, k] = p3;
+            lineID[1:2 * nx:2, 1:2 * ny:2, k] = p4;
+            lineID2 = lineID.reshape((8 * ncell), order='F')
+        del lineID, p1, p2, p3, p4;
 
         # Use COORD and 4 pillar Ids per cell to get
         # xmymzmxMyMzM pillar coord for their 8 cell nodes
-        COORD2=self.COORD.reshape((npillar,6))
-        node_pillar=np.zeros((8*ncell,6),dtype=float)
-        for k in range(8*ncell):
+        COORD2 = self.COORD.reshape((npillar, 6))
+        node_pillar = np.zeros((8 * ncell, 6), dtype=float)
+        for k in range(8 * ncell):
             for j in range(6):
-                node_pillar[k,j]=COORD2[lineID2[k],j]
-        del COORD2,lineID2;
+                node_pillar[k, j] = COORD2[lineID2[k], j]
+        del COORD2, lineID2;
 
         # Reconstruct nodal coordinates from pillars and ZCORN
         linFactor = (self.ZCORN[:] - node_pillar[:, 2]) / (node_pillar[:, 5] - node_pillar[:, 2]);
-        self.X=node_pillar[:,0]+linFactor*(node_pillar[:,3]-node_pillar[:,0])
-        self.Y=node_pillar[:,1]+linFactor*(node_pillar[:,4]-node_pillar[:,1])
+        self.X = node_pillar[:, 0] + linFactor * (node_pillar[:, 3] - node_pillar[:, 0])
+        self.Y = node_pillar[:, 1] + linFactor * (node_pillar[:, 4] - node_pillar[:, 1])
 
-        self.X=(self.X).reshape((2*nx,2*ny,2*nz),order='F')
-        self.Y=(self.Y).reshape((2*nx,2*ny,2*nz),order='F')
-        self.Z=(self.ZCORN).reshape((2*nx,2*ny,2*nz),order='F')
+        self.X = (self.X).reshape((2 * nx, 2 * ny, 2 * nz), order='F')
+        self.Y = (self.Y).reshape((2 * nx, 2 * ny, 2 * nz), order='F')
+        self.Z = (self.ZCORN).reshape((2 * nx, 2 * ny, 2 * nz), order='F')
 
         ## Reverse z if dz<0
         # Expand actnum by 2 in each direction
@@ -404,32 +472,63 @@ class GRDECL_Parser:
         # z=self.Z; z[a==0]=float('NaN')
         # dz=np.diff(z)
         # self.Z=dz;
+        if addZlayers:
+            # Add top+bottom layers to ensure correct processing of outer bdry at faults
+            minz = (self.Z).min();
+            maxz = (self.Z).max();
 
-        # Add top+bottom layers to ensure correct processing of outer bdry at faults
-        minz = (self.Z).min();
-        maxz = (self.Z).max();
+            e = np.zeros((2 * self.NX, 2 * self.NY, 1))
+            self.Z = np.concatenate((minz - 2 + e, minz - 1 + e, self.Z, maxz + 1 + e, maxz + 2 + e), axis=2)
 
-        e = np.zeros((2 * self.NX, 2 * self.NY, 1))
-        self.Z = np.concatenate((minz - 2 + e, minz - 1 + e, self.Z, maxz + 1 + e, maxz + 2 + e), axis=2)
+            e1 = (self.X[:, :, 0]).reshape((2 * self.NX, 2 * self.NY, 1));
+            e2 = (self.X[:, :, -1]).reshape((2 * self.NX, 2 * self.NY, 1));
+            self.X = np.concatenate((e1, e1, self.X, e2, e2), axis=2)
 
-        e1 = (self.X[:, :, 0]).reshape((2 * self.NX, 2 * self.NY, 1));
-        e2 = (self.X[:, :, -1]).reshape((2 * self.NX, 2 * self.NY, 1));
-        self.X = np.concatenate((e1, e1, self.X, e2, e2), axis=2)
+            e1 = (self.Y[:, :, 0]).reshape((2 * self.NX, 2 * self.NY, 1));
+            e2 = (self.Y[:, :, -1]).reshape((2 * self.NX, 2 * self.NY, 1));
+            self.Y = np.concatenate((e1, e1, self.Y, e2, e2), axis=2)
 
-        e1 = (self.Y[:, :, 0]).reshape((2 * self.NX, 2 * self.NY, 1));
-        e2 = (self.Y[:, :, -1]).reshape((2 * self.NX, 2 * self.NY, 1));
-        self.Y = np.concatenate((e1, e1, self.Y, e2, e2), axis=2)
-
-        # Mark active new layers
-        actnum = (self.ACTNUM).reshape(self.NX, self.NY, self.NZ);
-        e = np.ones((self.NX, self.NY, 1), dtype=bool)
-        self.actnum = np.concatenate((e, actnum, e), axis=2)
-        self.numAuxiliaryCells = 2 * np.prod(e.shape)
+            # Mark active new layers
+            actnum = (self.ACTNUM).reshape(self.NX, self.NY, self.NZ);
+            e = np.ones((self.NX, self.NY, 1), dtype=bool)
+            self.actnum = np.concatenate((e, actnum, e), axis=2)
+            self.numAuxiliaryCells = 2 * np.prod(e.shape)
 
         # Replace nan coordinates in X,Y,Z by inf to avoid nan
         from numpy import isnan
         for V in [self.X, self.Y, self.Z]:
             V[isnan(V)] = float('Inf')
+
+    def buildDXDYDZTOPS(self):
+        # Construct DX,DY,DZ,TOPS from CPG X,Y,Z
+        self.DX  =np.zeros((self.NX,self.NY,self.NZ))
+        self.DY  =np.zeros((self.NX,self.NY,self.NZ))
+        self.DZ  =np.zeros((self.NX,self.NY,self.NZ))
+        self.TOPS=np.zeros((self.NX,self.NY,self.NZ))
+        self.buildCornerPointNodes(addZlayers=False)
+        for k in range(self.NZ):
+            for j in range(self.NY):
+                for i in range(self.NX):
+                    I,J,K=2*i,2*j,2*k
+                    self.DX[i,j,k]     = self.X[I+1,J,K]-self.X[I,J,K]
+                    self.DY[i,j,k]     = self.Y[I,J+1,K]-self.Y[I,J,K]
+                    self.DZ[i,j,k]     = self.Z[I,J,K+1]-self.Z[I,J,K]
+
+        # INitialize TOPS with coordinale COORD lines minimum
+
+        for j in range(self.NY):
+            for i in range(self.NX):
+                iglob=i+j*(self.NX+1)
+                self.TOPS[i, j, 0]=self.COORD.reshape(((self.NX+1)*(self.NY+1),6))[iglob,2]
+
+        for k in range(self.NZ-1):
+            for j in range(self.NY):
+                for i in range(self.NX):
+                    self.TOPS[i, j, k+1] = self.TOPS[i,j,k] + self.DZ[i,j,k]
+        self.DX=self.DX.reshape((self.N),order='F')
+        self.DY=self.DY.reshape((self.N),order='F')
+        self.DZ=self.DZ.reshape((self.N),order='F')
+        self.TOPS=self.TOPS.reshape((self.N),order='F')
 
     def createInitialGrid(self):
         # Find unique points
@@ -673,9 +772,6 @@ class GRDECL_Parser:
         pts[:,0][:,np.newaxis]=xa[:,0][:,np.newaxis]+np.multiply(t,np.diff(xa))
         pts[:,1][:,np.newaxis]=ya[:,0][:,np.newaxis]+np.multiply(t,np.diff(ya))
         pts[:,2][:,np.newaxis]=za[:,0][:,np.newaxis]+np.multiply(t,np.diff(za))
-
-
-
         print('f')
         return pts
 
@@ -783,16 +879,7 @@ class GRDECL_Parser:
             # Remove repeated points arising from pinch:
             Corners  = np.ones((J.shape[0],1)) * float("Inf") ;
             Corners = (np.hstack((J,Corners))).transpose()
-
-
-
-
             print('f')
-
-
-
-
-
         pa=np.column_stack((self.a[C[:,0],:] , self.a[C[:,0]+1,:]))
 
     def findFaults(self):
@@ -892,7 +979,6 @@ class GRDECL_Parser:
 
         print('f')
 
-
     def process_pillar_faces(self):
         print('Processing regular faces')
         self.findFaces()
@@ -915,9 +1001,6 @@ class GRDECL_Parser:
         self.tag=np.array([1,2]) #West East
         self.process_pillar_faces()
 
-
-
-
     def LoadVar(self,Keyword,DataArray,DataSize):
         """Load varables into class
         example:
@@ -934,7 +1017,6 @@ class GRDECL_Parser:
             if(self.SkipedKeywords==0):print()
             print('     [Warnning] Unsupport keywords[%s]' % (Keyword))
             self.SkipedKeywords+=1
-
 
     def read_IncludeFile(self,filename_include,NumData):
         """Read Include data file
@@ -953,7 +1035,6 @@ class GRDECL_Parser:
             print('Data size %s is not equal to defined block dimension (NX*NY*NZ) %s'%(len(block_dataset),NumData))
         return block_dataset
 
-    
     def field_cutter(self,nx_range=(0,-1),ny_range=(0,-1),nz_range=(0,-1)):
         """Extract the subset of a domain
         
@@ -1024,7 +1105,6 @@ class GRDECL_Parser:
         NewGrid.SpatialDatas["PORO"]=PORO_new
         NewGrid.print_info()
         return NewGrid
-
 
     def print_info(self):
         print("     Grid Type=%s Grid" %(self.GRID_type))
@@ -1162,7 +1242,6 @@ class GRDECL_Parser:
         Pillar_i=nodeID%4
         return self.interpPtsOnPillar(Zs[nodeID],Pillars[Pillar_i])
 
-
     def getCornerPointCellIdx(self,i,j,k):
         """Obtain the eight coords index for a cell
 
@@ -1275,7 +1354,6 @@ class GRDECL_Parser:
         else:
             return -1
 
-
     def isBoundaryCell(self,Cell=[0,0,0],Dim='3D'):
         ''' Check the a given cell is boundary cell or not
 
@@ -1353,6 +1431,201 @@ class GRDECL_Parser:
             Fault[3]=True
 
         return Fault
+
+
+    # Coarsening methods
+    def create_partition_indices(self, Cgrid):
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # Generate partition Fine scale Ids in P0
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # Matrix blocks of i*ones(nx/Nx,ny/Ny,nz/Nz) (i=1,2,...,Nx*Ny*Nz)
+        Fgrid=self;
+        print('[Partioning] Partitoning from Fine grid of size: [%d,%d,%d]' \
+              % (Fgrid.NX, Fgrid.NY, Fgrid.NZ), \
+              'to Coarse grid of size: [%d,%d,%d]' \
+              % (Cgrid.NX, Cgrid.NY, Cgrid.NZ))
+        P0 = np.ones((Fgrid.NX, Fgrid.NY, Fgrid.NZ), dtype='int64');
+        ind_coarse = -1;
+        for k in range(Cgrid.NZ):
+            for j in range(Cgrid.NY):
+                for i in range(Cgrid.NX):
+                    ind_coarse += 1
+                    i0,i1 = coarse_start_end_indices(self.Rx,i)
+                    j0,j1 = coarse_start_end_indices(self.Ry,j)
+                    k0,k1 = coarse_start_end_indices(self.Rz,k)
+                    P0[i0:i1, j0:j1, k0:k1] = ind_coarse;
+
+        P0 = np.reshape(P0, (Fgrid.NX * Fgrid.NY * Fgrid.NZ), order='F')  # fortran (start loop with 'i'):: for k: for j: for i:
+        return P0
+
+    def fill_coarse_grdecl_DXDYDZTOPS(self,CGrid):
+        # Assign GRDECL cartesian attributes DX,DY,DZ,TOPS to coarse grid
+        FGrid = self;
+        CGrid.DX = np.zeros((CGrid.NX, CGrid.NY, CGrid.NZ))
+        CGrid.DY = np.zeros((CGrid.NX, CGrid.NY, CGrid.NZ))
+        CGrid.DZ = np.zeros((CGrid.NX, CGrid.NY, CGrid.NZ))
+        CGrid.TOPS = np.zeros((CGrid.NX, CGrid.NY, CGrid.NZ))
+        DX = np.reshape(FGrid.DX, (FGrid.NX, FGrid.NY, FGrid.NZ), order='F')
+        DY = np.reshape(FGrid.DY, (FGrid.NX, FGrid.NY, FGrid.NZ), order='F')
+        DZ = np.reshape(FGrid.DZ, (FGrid.NX, FGrid.NY, FGrid.NZ), order='F')
+        for k in range(CGrid.NZ):
+            for j in range(CGrid.NY):
+                for i in range(CGrid.NX):
+                    i0,i1 = coarse_start_end_indices(self.Rx,i)
+                    j0,j1 = coarse_start_end_indices(self.Ry,j)
+                    k0,k1 = coarse_start_end_indices(self.Rz,k)
+                    CGrid.DX[i, j, k] = (DX[i0:i1, j0, k0]).sum()
+                    CGrid.DY[i, j, k] = (DY[i0, j0:j1, k0]).sum()
+                    CGrid.DZ[i, j, k] = (DZ[i0,    j0, k0:k1]).sum()
+        assert(np.sum(CGrid.DX[:,0,0])==np.sum(FGrid.DX[0:self.NX])),"SUM(Coarse DX)!=SUM(Fine DX)"
+
+
+        for k in range(CGrid.NZ-1):
+            for j in range(CGrid.NY):
+                for i in range(CGrid.NX):
+                    CGrid.TOPS[i, j, k+1] = CGrid.TOPS[i, j, k] +CGrid.DZ[i, j, k+1]
+        CGrid.DX = np.reshape(CGrid.DX, (-1, 1), order='F')
+        CGrid.DY = np.reshape(CGrid.DY, (-1, 1), order='F')
+        CGrid.DZ = np.reshape(CGrid.DZ, (-1, 1), order='F')
+        CGrid.TOPS = np.reshape(CGrid.TOPS, (-1, 1), order='F')
+        CGrid.fill_VOL()
+
+    def fill_coarse_grdecl_COORD_ZCORN(self,CGrid):
+        ord='F'
+        self.ZCORN=self.ZCORN.reshape((2*self.NX,2*self.NY,2*self.NZ),order=ord)
+
+        CGrid.ZCORN=np.zeros((2*CGrid.NX,2*CGrid.NY,2*CGrid.NZ))
+        for K in range(CGrid.NZ):
+            for J in range(CGrid.NY):
+                for I in range(CGrid.NX):
+                    # indices of min/max in corresponding min/max fine cells
+                    i0,i1= coarse_start_end_indices(self.Rx,I)
+                    iloc=[i0,i1-1]
+                    j0,j1= coarse_start_end_indices(self.Ry,J)
+                    jloc=[j0,j1-1]
+                    k0,k1= coarse_start_end_indices(self.Rz,K)
+                    kloc=[k0,k1-1]
+                    for K_inc in range(2):
+                        for J_inc in range(2):
+                            for I_inc in range(2):
+                                CGrid.ZCORN[2*I+I_inc,2*J+J_inc,2*K+K_inc]=\
+                                 self.ZCORN[2*iloc[I_inc]+I_inc ,2*jloc[J_inc]+J_inc ,2*kloc[K_inc]+K_inc]
+
+        self.COORD=self.COORD.reshape(((self.NX+1)*(self.NY+1),6))
+        CGrid.COORD=np.zeros(((CGrid.NX+1)*(CGrid.NY+1),6))
+
+
+        for J in range(CGrid.NY):
+            for I in range(CGrid.NX):
+                for J_inc in range(2):
+                    for I_inc in range(2):
+                        iglob_coarse= (I+I_inc) +(J+J_inc) *(CGrid.NX+1)
+                        i0, i1 = coarse_start_end_indices(self.Rx, I)
+                        iloc = [i0, i1 ]
+                        j0, j1 = coarse_start_end_indices(self.Ry, J)
+                        jloc = [j0, j1 ]
+                        iglob_fine=iloc[I_inc]+jloc[J_inc]*(self.NX+1)
+                        CGrid.COORD[iglob_coarse,:]=self.COORD[iglob_fine ,: ]
+
+        self.ZCORN=self.ZCORN.reshape((8*self.N),order=ord)
+        self.COORD=self.COORD.reshape(((self.NX+1)*(self.NY+1)*6))
+
+        CGrid.ZCORN=CGrid.ZCORN.reshape((8*CGrid.N),order=ord)
+        CGrid.COORD=CGrid.COORD.reshape(((CGrid.NX+1)*(CGrid.NY+1)*6))
+        # print('Coarse CPG filled')
+
+    def fill_local_grdecl_COORD_ZCORN(self,LocalGrid, ind,Glob_ind):
+        ord='F'
+        self.ZCORN=self.ZCORN.reshape((2*self.NX,2*self.NY,2*self.NZ),order=ord)
+
+        coarseNx=len(self.Rx)
+        coarseNy=len(self.Ry)
+        coarseNz=len(self.Rz)
+        I,J,K=getI_J_K(ind, coarseNx, coarseNy, coarseNz)
+
+        [rx, ry, rz] =  [self.Rx[I], self.Ry[J], self.Rz[K]]
+        LocalGrid.ZCORN=np.zeros((2*LocalGrid.NX,2*LocalGrid.NY,2*LocalGrid.NZ))
+        for K in range(LocalGrid.NZ):
+            for J in range(LocalGrid.NY):
+                for I in range(LocalGrid.NX):
+                    linear_index=I+LocalGrid.NX*(J+LocalGrid.NY*K)
+                    ijk=Glob_ind[linear_index]
+                    i,j,k=getI_J_K(ijk,self.NX,self.NY,self.NZ)
+                    for K_inc in range(2):
+                        for J_inc in range(2):
+                            for I_inc in range(2):
+                                LocalGrid.ZCORN[2*I+I_inc,2*J+J_inc,2*K+K_inc]=\
+                                 self.ZCORN[2*i+I_inc,2*j+J_inc,2*k+K_inc]
+        del I_inc,J_inc,K_inc
+        self.COORD=self.COORD.reshape(((self.NX+1)*(self.NY+1),6))
+        LocalGrid.COORD=np.zeros(((LocalGrid.NX+1)*(LocalGrid.NY+1),6))
+        pillarIds=[]
+        nx=self.NX+1
+        ny=self.NY+1
+        nz=self.NZ+1
+        for J in range(LocalGrid.NY):
+            for I in range(LocalGrid.NX):
+                linear_index=I+J*(LocalGrid.NX)
+                ijk=Glob_ind[linear_index]
+                i, j, k = getI_J_K(ijk, self.NX, self.NY, self.NZ)
+                pillarIds.append( getIJK(i  ,j  ,0,nx,ny,nz) )
+                pillarIds.append( getIJK(i+1,j  ,0,nx,ny,nz) )
+                pillarIds.append( getIJK(i  ,j+1,0,nx,ny,nz) )
+                pillarIds.append( getIJK(i+1,j+1,0,nx,ny,nz) )
+        pillarIds=sorted(list(set(pillarIds)))
+        assert(len(pillarIds)==(LocalGrid.NX+1)*(LocalGrid.NY+1)),"PBM creating local mesh pillar numbers!=(nx+1)x(ny+1)"
+        ind_local_pillar=0
+        for ipillar in pillarIds:
+            LocalGrid.COORD[ind_local_pillar,:]=self.COORD[ipillar,:]
+            ind_local_pillar+=1
+
+        self.ZCORN=self.ZCORN.reshape((8*self.N),order=ord)
+        self.COORD=self.COORD.reshape(((self.NX+1)*(self.NY+1)*6))
+
+        LocalGrid.ZCORN=LocalGrid.ZCORN.reshape((8*LocalGrid.N),order=ord)
+        LocalGrid.COORD=LocalGrid.COORD.reshape(((LocalGrid.NX+1)*(LocalGrid.NY+1)*6))
+        # print('Local CPG filled')
+
+    def fill_local_grid(self,LocalMod,Partition,ind):
+        LocalGrid = LocalMod.GRDECL_Data
+        LocalGrid.GRID_type = self.GRID_type
+
+        # Assign Local grid dimensions
+        coarseNx=len(self.Rx)
+        coarseNy=len(self.Ry)
+        coarseNz=len(self.Rz)
+        I,J,K=getI_J_K(ind, coarseNx, coarseNy, coarseNz)
+        LocalGrid.NX = self.Rx[I]
+        LocalGrid.NY = self.Ry[J]
+        LocalGrid.NZ = self.Rz[K]
+        LocalGrid.N = LocalGrid.NX*LocalGrid.NY*LocalGrid.NZ
+
+        # Get local attributes
+        # Global indices
+        Glob_ind=np.where(Partition==ind)[0]
+        assert(len(Glob_ind) ==LocalGrid.N ),"PBM number of indices not matching partition and local grid"
+        # local DX DY DZ TOPS
+        LocalGrid.DX=np.array(self.DX)[Glob_ind]
+        LocalGrid.DY=np.array(self.DY)[Glob_ind]
+        LocalGrid.DZ=np.array(self.DZ)[Glob_ind]
+        LocalGrid.TOPS=np.array(self.TOPS)[Glob_ind]
+
+        # Assign coarse COORD and ZCORN attributes
+        if self.GRID_type=='CornerPoint':
+            self.fill_local_grdecl_COORD_ZCORN(LocalGrid,ind,Glob_ind)
+
+        # Build up basic spatial propertis
+        # LocalGrid.CreateCellData(varname="PERMX",  val_array= \
+        #     np.array(self.SpatialDatas["PERMX"])[Glob_ind])
+        # LocalGrid.CreateCellData(varname="PERM",  val_array= \
+        #     np.arrayself.SpatialDatas["PERMY"])[Glob_ind])
+        # LocalGrid.SpatialDatas["PERMZ"] = np.ones(LocalGrid.N) * 10.0
+        # LocalGrid.SpatialDatas["PORO"] = np.ones(LocalGrid.N) * 0.3
+        LocalGrid.SpatialDatas["PERMX"] = np.array(self.SpatialDatas["PERMX"])[Glob_ind]
+        LocalGrid.SpatialDatas["PERMY"] = np.array(self.SpatialDatas["PERMY"])[Glob_ind]
+        LocalGrid.SpatialDatas["PERMZ"] = np.array(self.SpatialDatas["PERMZ"])[Glob_ind]
+        LocalGrid.SpatialDatas["PORO"]  = np.array(self.SpatialDatas["PORO"])[Glob_ind]
+        return Glob_ind
 
 #############################################
 #
@@ -1521,3 +1794,23 @@ def overlap(min1, max1, min2, max2):
     #Reference: https://stackoverflow.com/questions/16691524/calculating-the-overlap-distance-of-two-1d-line-segments?rq=1
     return max(0.0, min(max1, max2) - max(min1, min2))
 
+# Compute coarse dimensions of hexaedric domain buildCPG
+def coarse_sizes_vect(N,r,inv=False):
+    assert (N>1),"No coarsening if N<=1"
+    # assert(r<N),"No coarsening if r>=N"
+    if (N % r >1):
+        if inv:
+            return [N % r]    + [r]*(N // r)
+        else:
+            return [r]*(N//r) + [N % r]
+    elif(N%r==0):
+        return [r] * (N // r)
+    if inv:
+        return [r+N%r] + [r]*(N//r-1)
+    else:
+        return [r]*(N//r-1) +[r+N%r]
+
+def coarse_start_end_indices(R,i):
+    istart=int(np.sum(R[:i]))
+    iend= int(istart+(R[i]))
+    return istart,iend
