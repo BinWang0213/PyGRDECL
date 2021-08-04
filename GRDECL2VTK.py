@@ -25,7 +25,7 @@ except ImportError:
     warnings.warn("No vtk module loaded.")
 
 
-
+from  Upscaler import *
 from GRDECL_Parser import *
 from GRDECL_FaultProcess import *
 #from GRDECL_CADExporter import *
@@ -59,9 +59,7 @@ class GeologyModel:
         self.VTK_Grids=None
 
         # MZ: Pointers to coarse and local models for upscaling
-        self.Coarse_Mod=None
-        self.Coarse_Mod_Partition=[]
-        self.local_Mod=None
+        self.Upscaler=Upscaler()
 
         if(self.fname!=''):
             self.GRDECL_Data=GRDECL_Parser(self.fname)
@@ -84,10 +82,11 @@ class GeologyModel:
         self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt)
 
     def create_coarse_model(self):
-        self.Coarse_Mod=GeologyModel()
-        self.Coarse_Mod.fname = os.path.splitext(self.fname)[0] + '_Coarse' +  os.path.splitext(self.fname)[1]
-        self.Coarse_Mod_Partition = self.GRDECL_Data.fill_coarse_grid(self.Coarse_Mod)
-        return self.Coarse_Mod
+        self.Upscaler.Coarse_Mod=GeologyModel()
+        self.Upscaler.Coarse_Mod.fname = os.path.splitext(self.fname)[0] + '_Coarse' +  os.path.splitext(self.fname)[1]
+        self.Upscaler.Coarse_Mod_Partition = self.GRDECL_Data.fill_coarse_grid(self.Upscaler.Coarse_Mod)
+        self.Upscale_Arithmetic_mean("PORO")
+        return self.Upscaler.Coarse_Mod
 
     def buildCornerPointNodes(self):
         self.GRDECL_Data.buildCornerPointNodes()
@@ -625,6 +624,9 @@ class GeologyModel:
         # print("start spsolve")
         p = spsolve(A, q)
         self.UpdateCellData(varname="Pressure", array=p)
+
+    def Upscale_Arithmetic_mean(self, scalar):
+        self.Upscaler.Upscale_Arithmetic_mean(self, scalar)
 
     def plot_scalar(self, scalar,ITK=True,ext='vtu'):
         try:

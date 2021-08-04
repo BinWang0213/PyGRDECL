@@ -184,3 +184,18 @@ def thicken_layers(Nz,K_LayerPerm):
         ibase = min(len(K_LayerPerm) - 1, ibase)
         AvgLayerPerm[i] = K_LayerPerm[ibase]
     return AvgLayerPerm
+
+# MZ: Plot histogram at logscale
+import matplotlib.pyplot as plt
+def plot_hist(Kvect,varname=""):
+    hist, bins = np.histogram(Kvect, bins=30);
+    # Lognormal distribution
+    logbins = np.logspace(np.log10(bins[0]),np.log10(bins[-1]),len(bins))
+
+    fig, axs = plt.subplots(1,1, figsize=(10, 5), facecolor='w', edgecolor='k')
+    fig.subplots_adjust(hspace = .5, wspace=.001)
+
+    axs.set_title(varname)
+    axs.hist(Kvect, bins=logbins, edgecolor='black', linewidth=1.2)
+    plt.xscale('log')
+    plt.show()
