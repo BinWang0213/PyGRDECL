@@ -87,9 +87,9 @@ class GeologyModel:
         self.Upscaler.create_coarse_model()
         return self.Upscaler.Coarse_Mod
 
-    def create_local_model(self,ind):
+    def create_local_model(self,ind,nlayer=0):
         self.Upscaler.local_Mod=GeologyModel()
-        return self.Upscaler.create_local_model(ind)
+        return self.Upscaler.create_local_model(ind,nlayer)
 
     def Upscale_Perm(self, upsc_methods):
         self.Upscaler.Upscale_Perm(upsc_methods)

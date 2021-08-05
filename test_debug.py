@@ -4,7 +4,7 @@ from GRDECL2VTK import *
 physDims=[2000.0,1000,500]
 
 # 1.2 Set model grid dimensions in gridDims
-Nx=30;  Ny=15;  Nz=Nx
+Nx=20;  Ny=20;  Nz=Nx
 gridDims=[Nx,Ny,Nz]
 
 # 1.3 Set corner point grid options
@@ -16,8 +16,8 @@ Model=GeologyModel()
 Model.buildCPGGrid(physDims,gridDims,opt)
 
 # 1.5 Compute First TPFA (block centered) Pressure values
-Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
-# Model.plot_scalar("Pressure",ITK=True).show()
+# Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
+# Model.plot_scalar("PORO",ITK=True).show()
 
 
 from utils import *
@@ -33,16 +33,27 @@ Update_values=[ phi  , K     , K     , 0.1*K ]
 Model.UpdateListCellData(var_list=Update_fields,array_list=Update_values)
 
 # 2.3 Compute TPFA (block centered) Pressure values
-Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
+# Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
 # Model.plot_scalar("Pressure",ITK=True).show()
 
 
 # 3.1 Set coarsening factor (grid dimensions of coarse cells)
-Model.GRDECL_Data.coarse2fine_ratio=[2]*3
+Model.GRDECL_Data.coarse2fine_ratio=[3]*3
 
 # 3.2 Create coarse grid and upscale porosity
 Model2=Model.create_coarse_model()
-Model.Upscale_Perm('TPFA_glob')
-Model2.plot_scalar("PORO",ITK=True).show()
+Model.Upscale_Perm('TPFA_loc')
+# Model2.plot_scalar("PORO",ITK=True).show(True)
 
+ind=36
+FGrid=Model.GRDECL_Data
+CGrid=Model2.GRDECL_Data
+Model3=Model.create_local_model(ind)
+print(Model.Upscaler.Glob_ind)
+Model3.plot_scalar("PORO",ITK=True).show(True)
 
+nlayer=2
+Model3b=Model.create_local_model(ind,nlayer)
+Model3b.plot_scalar("PORO",ITK=True).show(True)
+
+# print(Model.Upscaler.Glob_ind)

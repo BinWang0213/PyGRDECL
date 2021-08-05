@@ -1461,6 +1461,29 @@ class GRDECL_Parser:
         P0 = np.reshape(P0, (Fgrid.NX * Fgrid.NY * Fgrid.NZ), order='F')  # fortran (start loop with 'i'):: for k: for j: for i:
         return P0
 
+        # Coarsening methods
+
+    def get_partition_indices(self, Cgrid,nlayer,ind):
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # Generate partition Fine scale Ids in P0
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        # Matrix blocks of i*ones(nx/Nx,ny/Ny,nz/Nz) (i=1,2,...,Nx*Ny*Nz)
+        Fgrid = self;
+        i,j,k=getI_J_K(ind,Cgrid.NX, Cgrid.NY, Cgrid.NZ)
+        i0, i1 = coarse_start_end_indices_layered(self.Rx, i,nlayer)
+        Nx=i1-i0
+        j0, j1 = coarse_start_end_indices_layered(self.Ry, j,nlayer)
+        Ny=j1-j0
+        k0, k1 = coarse_start_end_indices_layered(self.Rz, k,nlayer)
+        Nz=k1-k0
+        localsize=[Nx,Ny,Nz]
+        Glob_ind_layered=[]
+        for k in range(k0, k1):
+            for j in range(j0, j1):
+                for i in range(i0, i1 ):
+                    Glob_ind_layered.append(getIJK(i,j,k,Fgrid.NX, Fgrid.NY, Fgrid.NZ))
+        return np.asarray(Glob_ind_layered),localsize
+
     def fill_coarse_grdecl_DXDYDZTOPS(self,CGrid):
         # Assign GRDECL cartesian attributes DX,DY,DZ,TOPS to coarse grid
         FGrid = self;
@@ -1546,7 +1569,7 @@ class GRDECL_Parser:
         coarseNz=len(self.Rz)
         I,J,K=getI_J_K(ind, coarseNx, coarseNy, coarseNz)
 
-        [rx, ry, rz] =  [self.Rx[I], self.Ry[J], self.Rz[K]]
+        [rx, ry, rz] =  [LocalGrid.NX,LocalGrid.NY,LocalGrid.NZ]
         LocalGrid.ZCORN=np.zeros((2*LocalGrid.NX,2*LocalGrid.NY,2*LocalGrid.NZ))
         for K in range(LocalGrid.NZ):
             for J in range(LocalGrid.NY):
@@ -1589,7 +1612,7 @@ class GRDECL_Parser:
         LocalGrid.COORD=LocalGrid.COORD.reshape(((LocalGrid.NX+1)*(LocalGrid.NY+1)*6))
         # print('Local CPG filled')
 
-    def fill_local_grid(self,LocalMod,Partition,ind):
+    def fill_local_grid(self,LocalMod,Partition,ind,Glob_ind,localsize):
         LocalGrid = LocalMod.GRDECL_Data
         LocalGrid.GRID_type = self.GRID_type
 
@@ -1598,14 +1621,14 @@ class GRDECL_Parser:
         coarseNy=len(self.Ry)
         coarseNz=len(self.Rz)
         I,J,K=getI_J_K(ind, coarseNx, coarseNy, coarseNz)
-        LocalGrid.NX = self.Rx[I]
-        LocalGrid.NY = self.Ry[J]
-        LocalGrid.NZ = self.Rz[K]
+        LocalGrid.NX = localsize[0]#self.Rx[I]
+        LocalGrid.NY = localsize[1]#self.Ry[J]
+        LocalGrid.NZ = localsize[2]#self.Rz[K]
         LocalGrid.N = LocalGrid.NX*LocalGrid.NY*LocalGrid.NZ
 
         # Get local attributes
         # Global indices
-        Glob_ind=np.where(Partition==ind)[0]
+        # Glob_ind=np.where(Partition==ind)[0]
         assert(len(Glob_ind) ==LocalGrid.N ),"PBM number of indices not matching partition and local grid"
         # local DX DY DZ TOPS
         LocalGrid.DX=np.array(self.DX)[Glob_ind]
@@ -1618,17 +1641,11 @@ class GRDECL_Parser:
             self.fill_local_grdecl_COORD_ZCORN(LocalGrid,ind,Glob_ind)
 
         # Build up basic spatial propertis
-        # LocalGrid.CreateCellData(varname="PERMX",  val_array= \
-        #     np.array(self.SpatialDatas["PERMX"])[Glob_ind])
-        # LocalGrid.CreateCellData(varname="PERM",  val_array= \
-        #     np.arrayself.SpatialDatas["PERMY"])[Glob_ind])
-        # LocalGrid.SpatialDatas["PERMZ"] = np.ones(LocalGrid.N) * 10.0
-        # LocalGrid.SpatialDatas["PORO"] = np.ones(LocalGrid.N) * 0.3
         LocalGrid.SpatialDatas["PERMX"] = np.array(self.SpatialDatas["PERMX"])[Glob_ind]
         LocalGrid.SpatialDatas["PERMY"] = np.array(self.SpatialDatas["PERMY"])[Glob_ind]
         LocalGrid.SpatialDatas["PERMZ"] = np.array(self.SpatialDatas["PERMZ"])[Glob_ind]
         LocalGrid.SpatialDatas["PORO"]  = np.array(self.SpatialDatas["PORO"])[Glob_ind]
-        return Glob_ind
+        # return Glob_ind
 
 #############################################
 #
@@ -1816,4 +1833,10 @@ def coarse_sizes_vect(N,r,inv=False):
 def coarse_start_end_indices(R,i):
     istart=int(np.sum(R[:i]))
     iend= int(istart+(R[i]))
+    return istart,iend
+
+def coarse_start_end_indices_layered(R,i,nlayer):
+    N=np.sum(R)
+    istart=max(0,int(np.sum(R[:i]))-nlayer)
+    iend= min(N,int(istart+(R[i]))+nlayer)
     return istart,iend

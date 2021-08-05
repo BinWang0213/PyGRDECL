@@ -20,12 +20,14 @@ class Upscaler:
         self.Upscale_Arithmetic_mean("PORO")
         return self.Coarse_Mod
 
-    def create_local_model(self,ind):
+    def create_local_model(self,ind,nlayer=0):
         CGrid=self.Coarse_Mod.GRDECL_Data
         assert (ind<CGrid.N),"Ind %Ddlocal exceeds Nx*Ny*Nz: %d"%(ind,CGrid.N)
         fineFname=self.FineModel.fname
-        self.local_Mod.fname = os.path.splitext(fineFname)[0] + '_Loc_'+str(ind) +  os.path.splitext(fineFname)[1]
-        self.Glob_ind=self.FineModel.GRDECL_Data.fill_local_grid(self.local_Mod,self.Coarse_Mod_Partition,ind)
+        stringloc='_Loc_'+str(ind)+"_nlayer_"+str(nlayer)
+        self.local_Mod.fname = os.path.splitext(fineFname)[0] +stringloc+  os.path.splitext(fineFname)[1]
+        self.Glob_ind,localsize=self.FineModel.GRDECL_Data.get_partition_indices(CGrid,nlayer,ind)
+        self.FineModel.GRDECL_Data.fill_local_grid(self.local_Mod,self.Coarse_Mod_Partition,ind,self.Glob_ind,localsize)
         return self.local_Mod
 
     def list_upscaling_methods(self):
