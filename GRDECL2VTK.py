@@ -82,11 +82,17 @@ class GeologyModel:
         self.GRDECL_Data.buildCPGGrid(physDims, gridDims,opt)
 
     def create_coarse_model(self):
+        self.Upscaler.FineModel=self
         self.Upscaler.Coarse_Mod=GeologyModel()
-        self.Upscaler.Coarse_Mod.fname = os.path.splitext(self.fname)[0] + '_Coarse' +  os.path.splitext(self.fname)[1]
-        self.Upscaler.Coarse_Mod_Partition = self.GRDECL_Data.fill_coarse_grid(self.Upscaler.Coarse_Mod)
-        self.Upscaler.Upscale_Arithmetic_mean(self,"PORO")
+        self.Upscaler.create_coarse_model()
         return self.Upscaler.Coarse_Mod
+
+    def create_local_model(self,ind):
+        self.Upscaler.local_Mod=GeologyModel()
+        return self.Upscaler.create_local_model(ind)
+
+    def Upscale_Perm(self, upsc_methods):
+        self.Upscaler.Upscale_Perm(upsc_methods)
 
     def buildCornerPointNodes(self):
         self.GRDECL_Data.buildCornerPointNodes()
@@ -248,7 +254,7 @@ class GeologyModel:
         DomainMarker3D=np.tile(DomainMarker2D,self.GRDECL_Data.NZ)
         self.AppendScalarData2VTK('SubVolumes',DomainMarker3D)
 
-    def CreateCellData(self,varname="SW",val=0.0,val_array=[]):
+    def CreateCellData(self,varname="SW",val=0.0,val_array=[],verbose=False):
         """Create a new data field
 
         Author:Bin Wang(binwang.0213@gmail.com)
@@ -260,11 +266,13 @@ class GeologyModel:
 
         if(len(val_array)==0):
             self.GRDECL_Data.SpatialDatas[varname]=np.ones(self.GRDECL_Data.N)*val
-            print('[CreateCellData] New variable [%s] created with a value of %lf!'%(varname,val))
+            if verbose:
+                print('[CreateCellData] New variable [%s] created with a value of %lf!'%(varname,val))
         else:
             assert len(val_array)==self.GRDECL_Data.N, print('     [Error] Input array is not compatible with number of cells!')
             self.GRDECL_Data.SpatialDatas[varname]=np.array(val_array)
-            print('[CreateCellData] New variable [%s] created with a given array!'%(varname,val))
+            if verbose:
+                print('[CreateCellData] New variable [%s] created with a given array!'%(varname))
 
     def LoadCellData(self,varname="SW",filename="123.txt"):
         """Create a new data field and load from a file
@@ -486,22 +494,16 @@ class GeologyModel:
         Grid=self.GRDECL_Data
         Nx = Grid.NX;        Ny = Grid.NY;        Nz = Grid.NZ
         # Index step to KIll or ADD transmissibily on fault
-        # ix = Nx // 2 - 1
-        # ix-=1
         self.GRDECL_Data.ZCORN = (self.GRDECL_Data.ZCORN).reshape((2 * Nx, 2 * Ny, 2 * Nz), order='F')
         for iz in range(Nz):
             iz_opp = Nz - 1 - iz
-            # for iy in range(1):
             h1_up = self.GRDECL_Data.ZCORN[2 * ix + 1, 0, 2 * iz + 1]
             h2_min = np.min(self.GRDECL_Data.ZCORN[2 * ix + 2, 0, :])
-            # if h1_up > h2_min:
-            #     break
             if h1_up > h2_min:
                 nz=iz
-                print("iz:",iz)
+                # print("iz:",iz)
                 break
         self.GRDECL_Data.ZCORN = (self.GRDECL_Data.ZCORN).reshape((8*self.GRDECL_Data.N), order='F')
-
         return nz
 
     # MZ::Add TPFA Pressure calculation
@@ -625,20 +627,47 @@ class GeologyModel:
         p = spsolve(A, q)
         self.UpdateCellData(varname="Pressure", array=p)
 
-    def Upscale_Perm(self, upsc_methods):
-        Model2 = self.Upscaler.Coarse_Mod
-        if isinstance(upsc_methods, str):
-            upsc_methods = [upsc_methods]
+    def computeGradP_V(self):
+        Grid=self.GRDECL_Data
+        Nx = Grid.NX;
+        Ny = Grid.NY;
+        Nz = Grid.NZ;
+        P=self.GRDECL_Data.SpatialDatas['Pressure']
 
-        scalars = ["PERMX", "PERMY", "PERMZ"]
-        if upsc_methods[0][-4:] == "mean":
-            if (len(upsc_methods)==1): upsc_methods *=3
-            for i, upsc_method in enumerate(upsc_methods):
-                method = "Upscale_" + upsc_method
-                scalar = scalars[i]
-                getattr(self.Upscaler, method)(self,scalar)
+        K = np.zeros((3,Nx,Ny,Nz))
+        Kx = self.GRDECL_Data.SpatialDatas['PERMX']
+        Ky = self.GRDECL_Data.SpatialDatas['PERMY']
+        Kz = self.GRDECL_Data.SpatialDatas['PERMZ']
+        for i, v in enumerate([Kx, Ky, Kz]):
+            v = v.reshape((Nx, Ny, Nz), order='F')
+            K[i, :, :, :] = v
+
+        p = P.reshape((Nx,Ny,Nz), order='F')
+        dx=self.GRDECL_Data.DX.reshape((Nx,Ny,Nz), order='F')
+        dy=self.GRDECL_Data.DY.reshape((Nx,Ny,Nz), order='F')
+        dz=self.GRDECL_Data.DZ.reshape((Nx,Ny,Nz), order='F')
+
+        GradP= np.array(np.gradient(p),dtype=float)
+        V=np.zeros_like(GradP)
+
+        for i,step in enumerate([dx,dy,dz]):
+           GradP[i,:,:,:]=GradP[i,:,:,:]/step
+           V[i,:,:,:]    =-np.abs(K[i,:,:,:])*GradP[i,:,:,:]
+        # self.GRDECL2VTK()
+        # # self.Fetch_Points_from_cells("V_Points", V)
+        # # self.Fetch_Points_from_cells("VyPoints", V[1, :, :])
+        # # self.Fetch_Points_from_cells("VzPoints", V[2, :, :])
+        #
+        if "Vx" not in self.GRDECL_Data.SpatialDatas:
+            self.CreateCellData("Vx", val_array=V[0, :].ravel(order='F'))
+            self.CreateCellData("Vy", val_array=V[1, :].ravel(order='F'))
+            self.CreateCellData("Vz", val_array=V[2, :].ravel(order='F'))
         else:
-            getattr(self.Upscaler, "Upscale_" + upsc_methods[0])()
+            self.UpdateCellData("Vx", array=V[0, :].ravel(order='F'))
+            self.UpdateCellData("Vy", array=V[1, :].ravel(order='F'))
+            self.UpdateCellData("Vz", array=V[2, :].ravel(order='F'))
+        # V=  np.array(np.gradient(p))
+        return GradP,V
 
     def plot_scalar(self, scalar,ITK=True,ext='vtu'):
         try:
@@ -687,7 +716,7 @@ class GeologyModel:
         filename2 = os.path.splitext(self.Upscaler.Coarse_Mod.fname)[0] + '.' + ext
         mesh2 = pv.read(filename2)
 
-        pl = pv.Plotter(shape=(1, 2),notebook=False)
+        pl = pv.Plotter(shape=(1, 2),notebook=True)
 
         pl.subplot(0, 0)
         pl.add_mesh(mesh1, scalars=scalar,show_edges=True)

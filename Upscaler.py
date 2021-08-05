@@ -1,17 +1,44 @@
 from utils import *
+import os
 
 class Upscaler:
     def __init__(self):
         """
         Fields and methods to upscale a geomodel
         """
+        self.FineModel=None
         self.Coarse_Mod=None
         self.Coarse_Mod_Partition=[]
         self.local_Mod=None
+        self.Glob_ind=[]
 
-    def Upscale_Arithmetic_mean(self,FineModel, scalar):
-        Finefield = FineModel.GRDECL_Data.SpatialDatas[scalar]
-        FGrid = FineModel.GRDECL_Data
+
+    def create_coarse_model(self):
+        fineFname=self.FineModel.fname
+        self.Coarse_Mod.fname = os.path.splitext(fineFname)[0] + '_Coarse' +  os.path.splitext(fineFname)[1]
+        self.Coarse_Mod_Partition = self.FineModel.GRDECL_Data.fill_coarse_grid(self.Coarse_Mod)
+        self.Upscale_Arithmetic_mean("PORO")
+        return self.Coarse_Mod
+
+    def create_local_model(self,ind):
+        CGrid=self.Coarse_Mod.GRDECL_Data
+        assert (ind<CGrid.N),"Ind %Ddlocal exceeds Nx*Ny*Nz: %d"%(ind,CGrid.N)
+        fineFname=self.FineModel.fname
+        self.local_Mod.fname = os.path.splitext(fineFname)[0] + '_Loc_'+str(ind) +  os.path.splitext(fineFname)[1]
+        self.Glob_ind=self.FineModel.GRDECL_Data.fill_local_grid(self.local_Mod,self.Coarse_Mod_Partition,ind)
+        return self.local_Mod
+
+    def list_upscaling_methods(self):
+        mean_methods = ['Arithmetic', 'Geometric', 'Harmonic', 'Harmx', 'Harmy', 'Harmz']
+        upsc_methods = [s + "_mean" for s in mean_methods]
+
+        tpfa_methods = ['loc', 'glob', 'loc_vol_average']
+        upsc_methods += ["TPFA_" + s for s in tpfa_methods]
+        return upsc_methods
+
+    def Upscale_Arithmetic_mean(self, scalar):
+        FGrid = self.FineModel.GRDECL_Data
+        Finefield = FGrid.SpatialDatas[scalar]
         CGrid = self.Coarse_Mod.GRDECL_Data
         vol = FGrid.VOL
         P0 = self.Coarse_Mod_Partition
@@ -23,9 +50,9 @@ class Upscaler:
         plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar], \
                   varname=scalar + ": " + "arithmetic: min %3f - max %3f" % (m, M))
 
-    def Upscale_Geometric_mean(self,FineModel, scalar):
-        Finefield=FineModel.GRDECL_Data.SpatialDatas[scalar]
-        FGrid=FineModel.GRDECL_Data
+    def Upscale_Geometric_mean(self, scalar):
+        FGrid = self.FineModel.GRDECL_Data
+        Finefield = FGrid.SpatialDatas[scalar]
         CGrid=self.Coarse_Mod.GRDECL_Data
         vol =FGrid.VOL
         P0=self.Coarse_Mod_Partition
@@ -37,9 +64,9 @@ class Upscaler:
         plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
                   varname=scalar + ": " + "geometric: min %3f - max %3f" %(m,M))
 
-    def Upscale_Harmonic_mean(self,fineModel, scalar):
-        Finefield=fineModel.GRDECL_Data.SpatialDatas[scalar]
-        FGrid=fineModel.GRDECL_Data
+    def Upscale_Harmonic_mean(self, scalar):
+        FGrid = self.FineModel.GRDECL_Data
+        Finefield = FGrid.SpatialDatas[scalar]
         CGrid=self.Coarse_Mod.GRDECL_Data
         vol =FGrid.VOL
         P0=self.Coarse_Mod_Partition
@@ -51,9 +78,9 @@ class Upscaler:
         plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
                   varname=scalar + ": " + "harmonic: min %3f - max %3f" %(m,M))
 
-    def Upscale_Harmx_mean(self,FineModel, scalar):
-        KF=FineModel.GRDECL_Data.SpatialDatas[scalar]
-        FGrid = FineModel.GRDECL_Data
+    def Upscale_Harmx_mean(self, scalar):
+        FGrid = self.FineModel.GRDECL_Data
+        KF = FGrid.SpatialDatas[scalar]
         CGrid = self.Coarse_Mod.GRDECL_Data
         vol = FGrid.VOL
         P0 = self.Coarse_Mod_Partition
@@ -89,9 +116,9 @@ class Upscaler:
         plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
                   varname=scalar + ": " + "harmonicx: min %3f - max %3f" %(m,M))
 
-    def Upscale_Harmy_mean(self,FineModel, scalar):
-        KF=FineModel.GRDECL_Data.SpatialDatas[scalar]
-        FGrid = FineModel.GRDECL_Data
+    def Upscale_Harmy_mean(self, scalar):
+        FGrid = self.FineModel.GRDECL_Data
+        KF = FGrid.SpatialDatas[scalar]
         CGrid = self.Coarse_Mod.GRDECL_Data
         vol = FGrid.VOL
         P0 = self.Coarse_Mod_Partition
@@ -127,9 +154,9 @@ class Upscaler:
         plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
                   varname=scalar + ": " + "harmonicy: min %3f - max %3f" %(m,M))
 
-    def Upscale_Harmz_mean(self,FineModel, scalar):
-        KF=FineModel.GRDECL_Data.SpatialDatas[scalar]
-        FGrid = FineModel.GRDECL_Data
+    def Upscale_Harmz_mean(self, scalar):
+        FGrid = self.FineModel.GRDECL_Data
+        KF = FGrid.SpatialDatas[scalar]
         CGrid = self.Coarse_Mod.GRDECL_Data
         vol = FGrid.VOL
         P0 = self.Coarse_Mod_Partition
@@ -161,3 +188,147 @@ class Upscaler:
         M=np.max(KC)
         plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
                   varname=scalar + ": " + "harmonicz: min %3f - max %3f" %(m,M))
+
+    def Upscale_TPFA_loc(self):
+        CGrid = self.Coarse_Mod.GRDECL_Data
+
+        for ind in range(CGrid.N):
+            # print("local upscaling for block: ",ind)
+            Model3= self.FineModel.create_local_model(ind)
+            Nx = Model3.GRDECL_Data.NX
+            Ny = Model3.GRDECL_Data.NY
+            Nz = Model3.GRDECL_Data.NZ
+            N  = Model3.GRDECL_Data.N
+            dx = Model3.GRDECL_Data.DX
+            dy = Model3.GRDECL_Data.DY
+            dz = Model3.GRDECL_Data.DZ
+
+            directions = ["i", "j", "k"]
+            Lx = np.sum(dx[:Nx])
+            Ly = np.sum(dy[0:Nx * Ny:Nx])
+            Lz = np.sum(dz[0:N:Nx * Ny])
+            Lxyz = [Lx, Ly, Lz]
+            dxyz = [dx, dy, dz]
+            scalars = ["PERMX", "PERMY", "PERMZ"]
+            for i, dir in enumerate(directions):
+                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+                GradP, V = Model3.computeGradP_V()
+                GradP = GradP.reshape((3, Model3.GRDECL_Data.N), order='F')
+                V = V.reshape((3, Model3.GRDECL_Data.N), order='F')
+
+                Ind_face0, Ind_face1 = Model3.compute_bdry_indices(direction=dir)
+
+                L = Lxyz[i]
+                A = Lxyz[(i + 1) % 3] * Lxyz[(i + 2) % 3]
+                q = np.sum(
+                    V[i, Ind_face1] * np.array(dxyz[(i + 1) % 3])[Ind_face1] * np.array(dxyz[(i + 2) % 3])[Ind_face1])
+                CGrid.SpatialDatas[scalars[i]][ind] = np.abs(q) * L / A
+        i = 0
+        m = np.min(CGrid.SpatialDatas[scalars[i]])
+        M = np.max(CGrid.SpatialDatas[scalars[i]])
+        plot_hist(CGrid.SpatialDatas[scalars[i]], \
+                  varname=scalars[i] + ": " + "Local Flow min %3f - max %3f" % (m, M))
+
+    def Upscale_TPFA_glob(self):
+        FGrid=self.FineModel.GRDECL_Data
+        CGrid = self.Coarse_Mod.GRDECL_Data
+        scalars = ["PERMX", "PERMY", "PERMZ"]
+        directions = ["i", "j", "k"]
+        for i, dir in enumerate(directions):
+            self.FineModel.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+            GradP, V = self.FineModel.computeGradP_V()
+            V = V.reshape((3, FGrid.N),order='F')
+            GradP = GradP.reshape((3, FGrid.N),order='F')
+
+            for ind_model_local in range(CGrid.N):
+                Model3=self.FineModel.create_local_model(ind_model_local)
+                # Model3 = self.local_Mod
+                V_loc=np.array(V,dtype=float)[:,self.Glob_ind]
+                GradP_loc=np.array(GradP,dtype=float)[0:3,self.Glob_ind]
+
+                Nx = Model3.GRDECL_Data.NX
+                Ny = Model3.GRDECL_Data.NY
+                Nz = Model3.GRDECL_Data.NZ
+                N = Model3.GRDECL_Data.N
+                dx = Model3.GRDECL_Data.DX
+                dy = Model3.GRDECL_Data.DY
+                dz = Model3.GRDECL_Data.DZ
+
+                dxyz = [dx, dy, dz]
+                Ind_face0, Ind_face1 = Model3.compute_bdry_indices(direction=dir)
+                GradP_face = np.sum(GradP_loc[i, Ind_face1] * \
+                           np.array(dxyz[(i + 1) % 3])[Ind_face1] *\
+                           np.array(dxyz[(i + 2) % 3])[Ind_face1])
+                q = np.sum(V_loc[i, Ind_face1] * \
+                           np.array(dxyz[(i + 1) % 3])[Ind_face1] *\
+                           np.array(dxyz[(i + 2) % 3])[Ind_face1])
+                CGrid.SpatialDatas[scalars[i]][ind_model_local] = np.abs(q)  / (GradP_face)
+        i=0
+        m=np.min(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalars[i]])
+        M=np.max(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalars[i]])
+        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalars[i]], \
+                  varname=scalars[i] + ": " + "Global Flow min %3f - max %3f" %(m,M))
+
+    def Upscale_TPFA_loc_vol_average(self):
+        FGrid=self.FineModel.GRDECL_Data
+        CGrid = self.Coarse_Mod.GRDECL_Data
+        for ind in range(CGrid.N):
+            Model3=self.FineModel.create_local_model(ind)
+            # Model3 = self.local_Mod
+            Nx = Model3.GRDECL_Data.NX
+            Ny = Model3.GRDECL_Data.NY
+            Nz = Model3.GRDECL_Data.NZ
+            N = Model3.GRDECL_Data.N
+            dx = Model3.GRDECL_Data.DX
+            dy = Model3.GRDECL_Data.DY
+            dz = Model3.GRDECL_Data.DZ
+            scalars = ["PERMX","PERMXY", "PERMXZ","PERMYX", "PERMY","PERMYZ","PERMZX","PERMZY","PERMZZ"]
+            directions = ["i", "j", "k"]
+            # Initialize local system to be solved
+            A=np.zeros((9+3,9))
+            # Enforce symmetry
+            A[9,1]=1;A[9,3]=-1
+            A[10,2]=1;A[10,6]=-1
+            A[11,5]=1;A[11,7]=-1
+
+            b=np.zeros((9+3,1))
+            vol=dx*dy*dz
+            vol_tot = np.sum(vol)
+
+            for ind_sys,dir in enumerate(directions):
+                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+                GradP, V = Model3.computeGradP_V()
+                GradP = GradP.reshape((3, Model3.GRDECL_Data.N),order='F')
+                V = V.reshape((3, Model3.GRDECL_Data.N),order='F')
+                for ivar in range(3):
+                    Mean_GradPi = np.sum(GradP[ivar, :] *vol) /vol_tot
+                    Mean_Vi = np.sum(V[ivar, :] *vol) /vol_tot
+                    irow=ivar+3*ind_sys
+                    b[irow]       = -Mean_Vi
+                    A[0+3*ind_sys,ivar]  = Mean_GradPi
+                    A[1+3*ind_sys,ivar+3]= Mean_GradPi
+                    A[2+3*ind_sys,ivar+6]= Mean_GradPi
+            K_loc, residuals, rank, s=np.linalg.lstsq(A,b)
+            for iscalar,scalar in enumerate(scalars):
+                if scalar not in CGrid.SpatialDatas:
+                    self.Coarse_Mod.CreateCellData(varname=scalar, val=1)
+                CGrid.SpatialDatas[scalar][ind] = K_loc[iscalar]
+        i=0
+        m=np.min(CGrid.SpatialDatas[scalars[i]])
+        M=np.max(CGrid.SpatialDatas[scalars[i]])
+        plot_hist(CGrid.SpatialDatas[scalars[i]], \
+                  varname=scalars[i] + ": " + "Local Flow Vol Avg min %3f - max %3f" %(m,M))
+
+    def Upscale_Perm(self, upsc_methods):
+        if isinstance(upsc_methods, str):
+            upsc_methods = [upsc_methods]
+
+        scalars = ["PERMX", "PERMY", "PERMZ"]
+        if upsc_methods[0][-4:] == "mean":
+            if (len(upsc_methods)==1): upsc_methods *=3
+            for i, upsc_method in enumerate(upsc_methods):
+                method = "Upscale_" + upsc_method
+                scalar = scalars[i]
+                getattr(self, method)(scalar)
+        else:
+            getattr(self, "Upscale_" + upsc_methods[0])()

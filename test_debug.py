@@ -42,7 +42,7 @@ Model.GRDECL_Data.coarse2fine_ratio=[2]*3
 
 # 3.2 Create coarse grid and upscale porosity
 Model2=Model.create_coarse_model()
-Model.Upscale_Perm('Harmx_mean')
+Model.Upscale_Perm('TPFA_glob')
 Model2.plot_scalar("PORO",ITK=True).show()
 
 
