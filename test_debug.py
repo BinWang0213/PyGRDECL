@@ -4,7 +4,7 @@ from GRDECL2VTK import *
 physDims=[2000.0,1000,500]
 
 # 1.2 Set model grid dimensions in gridDims
-Nx=20;  Ny=20;  Nz=Nx
+Nx=30;  Ny=10;  Nz=Nx
 gridDims=[Nx,Ny,Nz]
 
 # 1.3 Set corner point grid options
@@ -16,7 +16,7 @@ Model=GeologyModel()
 Model.buildCPGGrid(physDims,gridDims,opt)
 
 # 1.5 Compute First TPFA (block centered) Pressure values
-# Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
+Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt,Lin_BC=True )
 # Model.plot_scalar("PORO",ITK=True).show()
 
 

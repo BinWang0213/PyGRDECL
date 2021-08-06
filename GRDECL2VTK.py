@@ -456,6 +456,63 @@ class GeologyModel:
         f.close()
         print("...done")
 
+    def set_lin_Pressure_ind_val(self,direction):
+        assert not direction=='ijk',"[TPFA solver] LIN BC not compatible with 'ijk' direction"
+        Grid = self.GRDECL_Data
+        rangeX=range(Grid.NX);        rangeY=range(Grid.NY);        rangeZ=range(Grid.NZ)
+        if (direction == "i"):
+            list_ind=[]
+            list_ratio=[0]
+            rangeY1 = [0,Grid.NY-1]
+            rangeY2 = range(1,Grid.NY-1)
+
+            rangeZ2 = [0,Grid.NZ-1]
+            for i in rangeX:
+                list_tmp = []
+                for k in rangeZ:
+                    for j in rangeY1:
+                        list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                for k in rangeZ2:
+                    for j in rangeY2:
+                        list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                list_ind.append(list_tmp)
+
+            if (direction == "j"):
+                list_ind = []
+                list_ratio = [0]
+                rangeX1 = [0, Grid.NX - 1]
+                rangeX2 = range(1, Grid.NX - 1)
+
+                rangeZ2 = [0, Grid.NZ - 1]
+                for j in rangeY:
+                    list_tmp = []
+                    for k in rangeZ:
+                        for i in rangeX1:
+                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                    for k in rangeZ2:
+                        for i in rangeX2:
+                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                    list_ind.append(list_tmp)
+
+            if (direction == "k"):
+                list_ind = []
+                list_ratio = [0]
+                rangeY1 = [0, Grid.NY - 1]
+                rangeY2 = range(1, Grid.NY - 1)
+
+                rangeX2 = [0, Grid.NX - 1]
+                for k in rangeZ:
+                    list_tmp = []
+                    for i in rangeX:
+                        for j in rangeY1:
+                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                    for i in rangeX2:
+                        for j in rangeY2:
+                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                    list_ind.append(list_tmp)
+            return list_ind
+
+
     def compute_bdry_indices(self,direction):
         Grid=self.GRDECL_Data
         Min_ind=[];        Max_ind=[]
@@ -489,38 +546,8 @@ class GeologyModel:
                         Max_ind.append(i+Grid.NX*(j+k*Grid.NY))
         return  Min_ind,Max_ind
 
-    def compute_bdry_indices(self,direction):
-        Grid=self.GRDECL_Data
-        Min_ind=[];        Max_ind=[]
-        rangeX=range(Grid.NX);        rangeY=range(Grid.NY);        rangeZ=range(Grid.NZ)
-        if (direction=="ijk"):
-            Min_ind=[0]
-            Max_ind=[Grid.N-1]
-        else:
-            # Min
-            if (direction == "i"):
-                rangeX = [0]
-            if (direction == "j"):
-                rangeY = [0]
-            if (direction == "k"):
-                rangeZ = [0]
-            for k in rangeZ:
-                for j in rangeY:
-                    for i in rangeX:
-                        Min_ind.append(i+Grid.NX*(j+k*Grid.NY))
 
-            # Max
-            if (direction == "i"):
-                rangeX = [Grid.NX-1]
-            if (direction == "j"):
-                rangeY = [Grid.NY-1]
-            if (direction == "k"):
-                rangeZ = [Grid.NZ-1]
-            for k in rangeZ:
-                for j in rangeY:
-                    for i in rangeX:
-                        Max_ind.append(i+Grid.NX*(j+k*Grid.NY))
-        return  Min_ind,Max_ind
+
     def nz_to_fault(self,ix):
         nz=0
         Grid=self.GRDECL_Data
@@ -539,13 +566,14 @@ class GeologyModel:
         return nz
 
     # MZ::Add TPFA Pressure calculation
-    def compute_TPFA_Pressure(self,Press_inj=1,direction="i",Fault_opt=None,Gmres=True):
+    def compute_TPFA_Pressure(self,Press_inj=1,direction="i",Fault_opt=None,Gmres=True,Lin_BC=False):
         if "Pressure" not in self.GRDECL_Data.SpatialDatas:
             self.CreateCellData(varname="Pressure", val=1)
 
         mDarcy=9.869233e-16;
         Grid=self.GRDECL_Data
         Nx = Grid.NX;        Ny = Grid.NY;        Nz = Grid.NZ
+        dims=[Nx,Ny,Nz]
         assert((Nx>1) and (Ny>1) and (Nz>1)),"TPFA not able to run for NX,NY,NZ<=1"
         N = Nx * Ny * Nz
         self.buildDXDYDZTOPS()
@@ -649,6 +677,12 @@ class GeologyModel:
         Min_ind,Max_ind=self.compute_bdry_indices(direction)
         set_dirichlet(N, diagonals, decs, q,Min_ind,  0)
         set_dirichlet(N, diagonals, decs, q, Max_ind, Press_inj)
+        if Lin_BC:
+            list_ind=self.set_lin_Pressure_ind_val(direction)
+            idir= ['i','j','k'].index(direction)
+            for ind_val_pressure in range(dims[idir]):
+                val=float(ind_val_pressure/(dims[idir]-1))
+                set_dirichlet(N, diagonals, decs, q, list_ind[ind_val_pressure], val)
 
         import scipy.sparse as SP
         A = SP.spdiags(diagonals, decs, N, N)
@@ -764,7 +798,6 @@ class GeologyModel:
         pl.add_mesh(mesh2, scalars=scalar,show_edges=True)
         return pl
 
-
     def plot_to_png(self,scalar,clim=[],title="",cbar_title="",outputname="",log_scale=False):
         try:
             import pyvista as pv
@@ -807,7 +840,6 @@ class GeologyModel:
         outputname = dirname+"/"+upsc_meth+"_" + scalar
         self.plot_to_png(scalar, clim=clim,log_scale=(scalar != "Pressure"),\
                          title=title, cbar_title=cbar_title, outputname=outputname)
-
 
     def plot_fine_and_coarse_(self,Coarse_Mod, ext='vtu'):
         try:

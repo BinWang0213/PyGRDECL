@@ -17,7 +17,7 @@ class Upscaler:
         self.ilayer0=[]
         self.localsize0=[]
         self.indices_max_bdry0=[]
-
+        self.Lin_BC=True
 
 
     def create_coarse_model(self):
@@ -212,7 +212,7 @@ class Upscaler:
             dxyz = [dx, dy, dz]
             scalars = ["PERMX", "PERMY", "PERMZ"]
             for i, dir in enumerate(directions):
-                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir,Lin_BC=self.Lin_BC)
                 GradP, V = Model3.computeGradP_V()
                 GradP =np.array( GradP.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
                 V = np.array(V.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
@@ -292,7 +292,7 @@ class Upscaler:
             vol_tot = np.sum(vol)
 
             for ind_sys,dir in enumerate(directions):
-                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir,Lin_BC=self.Lin_BC)
                 GradP, V = Model3.computeGradP_V()
                 GradP =np.array( GradP.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
                 V = np.array(V.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
