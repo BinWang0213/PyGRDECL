@@ -14,6 +14,7 @@
 import os
 import numpy as np
 import math
+from utils import plot_hist
 SupportKeyWords=[
     'SPECGRID', #Dimenion of the corner point grid
     'DIMENS',   #Define the dimension of the cartesian grid
@@ -1646,7 +1647,11 @@ class GRDECL_Parser:
         LocalGrid.SpatialDatas["PERMZ"] = np.array(self.SpatialDatas["PERMZ"])[Glob_ind]
         LocalGrid.SpatialDatas["PORO"]  = np.array(self.SpatialDatas["PORO"])[Glob_ind]
         # return Glob_ind
-
+    def Plot_hist(self,scalar,text=""):
+        m = np.min(self.SpatialDatas[scalar])
+        M = np.max(self.SpatialDatas[scalar])
+        plot_hist(self.SpatialDatas[scalar], \
+                  varname=scalar + ": " + text+" min %3f - max %3f" % (m, M))
 #############################################
 #
 #  Auxiliary function

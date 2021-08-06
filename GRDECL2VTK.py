@@ -897,26 +897,3 @@ def set_dirichlet(N,diagonals, decs,q, List_ind, value):
                 diagonals[i,ind+dec]=0
             diagonals[ind0, ind] = 1
         q[ind] = value;
-
-def compute_bdry_max_indices(localsize,direction):
-    Min_ind=[];        Max_ind=[]
-    NX,NY,NZ=localsize
-    rangeX=range(NX);        rangeY=range(NY);        rangeZ=range(NZ)
-    N=NX*NY*NZ
-    if (direction=="ijk"):
-        Max_ind=[N-1]
-    else:
-        # Max
-        if (direction == "i"):
-            rangeX = [NX-1]
-        if (direction == "j"):
-            rangeY = [NY-1]
-        if (direction == "k"):
-            rangeZ = [NZ-1]
-        for k in rangeZ:
-            for j in rangeY:
-                for i in rangeX:
-                    Max_ind.append(i+NX*(j+k*NY))
-    return  Max_ind
-
-

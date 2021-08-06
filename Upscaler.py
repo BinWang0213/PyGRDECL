@@ -64,10 +64,7 @@ class Upscaler:
         # 1. Arithmetic Average (Weighted by volumes) per coarse grid cells
         CoarseField = np.bincount(P0, weights=vol * Finefield) / np.bincount(P0, weights=vol)
         self.Coarse_Mod.UpdateCellData(varname=scalar, array=CoarseField)
-        m = np.min(CoarseField)
-        M = np.max(CoarseField)
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar], \
-                  varname=scalar + ": " + "arithmetic: min %3f - max %3f" % (m, M))
+        CGrid.Plot_hist(scalar, text="Arithmetic")
 
     def Upscale_Geometric_mean(self, scalar):
         FGrid = self.FineModel.GRDECL_Data
@@ -78,10 +75,7 @@ class Upscaler:
         # 1. Arithmetic Average (Weighted by volumes) per coarse grid cells
         CoarseField = np.exp(np.bincount(P0, weights=vol * np.log(Finefield)) / np.bincount(P0, weights=vol))
         self.Coarse_Mod.UpdateCellData(varname=scalar, array=CoarseField)
-        m=np.min(CoarseField)
-        M=np.max(CoarseField)
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
-                  varname=scalar + ": " + "geometric: min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalar, text="Geometric")
 
     def Upscale_Harmonic_mean(self, scalar):
         FGrid = self.FineModel.GRDECL_Data
@@ -92,10 +86,7 @@ class Upscaler:
         # 2. Harmonic Average (Weighted by volumes) per coarse grid cells
         CoarseField=np.bincount(P0,weights=vol)/np.bincount(P0,weights=vol/Finefield)
         self.Coarse_Mod.UpdateCellData(varname=scalar, array=CoarseField)
-        m=np.min(CoarseField)
-        M=np.max(CoarseField)
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
-                  varname=scalar + ": " + "harmonic: min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalar, text="Harmonic")
 
     def Upscale_Harmx_mean(self, scalar):
         FGrid = self.FineModel.GRDECL_Data
@@ -130,10 +121,7 @@ class Upscaler:
                     #Arithm mean of all the local Harm means
                     KC[i,j,k] = np.sum(KCloc*vol_loc)/np.sum(vol_loc)
         self.Coarse_Mod.UpdateCellData(varname=scalar, array=KC.reshape((-1,1),order='F'))
-        m=np.min(KC)
-        M=np.max(KC)
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
-                  varname=scalar + ": " + "harmonicx: min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalar, text="HarmonicX-Arithmetic")
 
     def Upscale_Harmy_mean(self, scalar):
         FGrid = self.FineModel.GRDECL_Data
@@ -168,10 +156,7 @@ class Upscaler:
                     #Arithm mean of all the local (i,j,k) x slices
                     KC[i,j,k] = np.sum(KC3loc*vol_loc)/np.sum(vol_loc)
         self.Coarse_Mod.UpdateCellData(varname=scalar, array=KC.reshape((-1,1),order='F'))
-        m=np.min(KC)
-        M=np.max(KC)
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
-                  varname=scalar + ": " + "harmonicy: min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalar, text="HarmonicY-Arithmetic")
 
     def Upscale_Harmz_mean(self, scalar):
         FGrid = self.FineModel.GRDECL_Data
@@ -203,10 +188,7 @@ class Upscaler:
                     #Arithm mean of all the local (i,j,k) x slices
                     KC[i,j,k] = np.sum(KC3loc*vol_loc)/np.sum(vol_loc)
         self.Coarse_Mod.UpdateCellData(varname=scalar, array=KC.reshape((-1,1),order='F'))
-        m=np.min(KC)
-        M=np.max(KC)
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalar],\
-                  varname=scalar + ": " + "harmonicz: min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalar, text="HarmonicZ-Arithmetic")
 
     def Upscale_TPFA_loc(self):
         CGrid = self.Coarse_Mod.GRDECL_Data
@@ -241,10 +223,7 @@ class Upscaler:
                     V[i, Ind_face1] * np.array(dxyz[(i + 1) % 3])[Ind_face1] * np.array(dxyz[(i + 2) % 3])[Ind_face1])
                 CGrid.SpatialDatas[scalars[i]][ind] = np.abs(q) * L / A
         i = 0
-        m = np.min(CGrid.SpatialDatas[scalars[i]])
-        M = np.max(CGrid.SpatialDatas[scalars[i]])
-        plot_hist(CGrid.SpatialDatas[scalars[i]], \
-                  varname=scalars[i] + ": " + "Local Flow min %3f - max %3f" % (m, M))
+        CGrid.Plot_hist(scalars[i],text="Local Flow")
 
     def Upscale_TPFA_glob(self):
         FGrid=self.FineModel.GRDECL_Data
@@ -281,10 +260,7 @@ class Upscaler:
                            np.array(dxyz[(i + 2) % 3])[Ind_face1])
                 CGrid.SpatialDatas[scalars[i]][ind_model_local] = np.abs(q)  / (GradP_face)
         i=0
-        m=np.min(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalars[i]])
-        M=np.max(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalars[i]])
-        plot_hist(self.Coarse_Mod.GRDECL_Data.SpatialDatas[scalars[i]], \
-                  varname=scalars[i] + ": " + "Global Flow min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalars[i], text="Global Flow")
 
     def Upscale_TPFA_loc_vol_average(self):
         FGrid=self.FineModel.GRDECL_Data
@@ -334,10 +310,7 @@ class Upscaler:
                     self.Coarse_Mod.CreateCellData(varname=scalar, val=1)
                 CGrid.SpatialDatas[scalar][ind] = K_loc[iscalar]
         i=0
-        m=np.min(CGrid.SpatialDatas[scalars[i]])
-        M=np.max(CGrid.SpatialDatas[scalars[i]])
-        plot_hist(CGrid.SpatialDatas[scalars[i]], \
-                  varname=scalars[i] + ": " + "Local Flow Vol Avg min %3f - max %3f" %(m,M))
+        CGrid.Plot_hist(scalars[i], text="Local volume average Flow")
 
     def Upscale_Perm(self, upsc_methods):
         if isinstance(upsc_methods, str):
