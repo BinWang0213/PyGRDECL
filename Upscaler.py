@@ -10,6 +10,9 @@ class Upscaler:
         self.Coarse_Mod=None
         self.Coarse_Mod_Partition=[]
         self.local_Mod=None
+        self.local_Mod_extended=None
+        self.nlayer=0
+        self.ilayer0=[]
         self.Glob_ind=[]
 
 
@@ -20,13 +23,18 @@ class Upscaler:
         self.Upscale_Arithmetic_mean("PORO")
         return self.Coarse_Mod
 
-    def create_local_model(self,ind,nlayer=0):
+    def create_local_model(self,ind):
         CGrid=self.Coarse_Mod.GRDECL_Data
         assert (ind<CGrid.N),"Ind %Ddlocal exceeds Nx*Ny*Nz: %d"%(ind,CGrid.N)
         fineFname=self.FineModel.fname
-        stringloc='_Loc_'+str(ind)+"_nlayer_"+str(nlayer)
+        stringloc='_Loc_'+str(ind)+"_nlayer_"+str(self.nlayer)
         self.local_Mod.fname = os.path.splitext(fineFname)[0] +stringloc+  os.path.splitext(fineFname)[1]
-        self.Glob_ind,localsize=self.FineModel.GRDECL_Data.get_partition_indices(CGrid,nlayer,ind)
+        self.Glob_ind,localsize=self.FineModel.GRDECL_Data.get_partition_indices(CGrid,self.nlayer,ind)
+        Glob_ind0, localsize0 = self.FineModel.GRDECL_Data.get_partition_indices(CGrid, nlayer=0, ind=ind)
+        self.ilayer0 = []
+        for i, ind in enumerate(self.Glob_ind):
+            if ind in Glob_ind0:
+                self.ilayer0.append(i)
         self.FineModel.GRDECL_Data.fill_local_grid(self.local_Mod,self.Coarse_Mod_Partition,ind,self.Glob_ind,localsize)
         return self.local_Mod
 
@@ -193,8 +201,10 @@ class Upscaler:
 
     def Upscale_TPFA_loc(self):
         CGrid = self.Coarse_Mod.GRDECL_Data
-
+        print("[UPSCALING TPFA loc], nlayer:",self.nlayer)
         for ind in range(CGrid.N):
+            nlayer = self.nlayer
+            self.nlayer=0
             # print("local upscaling for block: ",ind)
             Model3= self.FineModel.create_local_model(ind)
             Nx = Model3.GRDECL_Data.NX
@@ -212,11 +222,14 @@ class Upscaler:
             Lxyz = [Lx, Ly, Lz]
             dxyz = [dx, dy, dz]
             scalars = ["PERMX", "PERMY", "PERMZ"]
+            # Add layers if necessary
+            self.nlayer=nlayer
+            Model3_ext= self.FineModel.create_local_model(ind)
             for i, dir in enumerate(directions):
-                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
-                GradP, V = Model3.computeGradP_V()
-                GradP = GradP.reshape((3, Model3.GRDECL_Data.N), order='F')
-                V = V.reshape((3, Model3.GRDECL_Data.N), order='F')
+                Model3_ext.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+                GradP, V = Model3_ext.computeGradP_V()
+                GradP =np.array( GradP.reshape((3, Model3_ext.GRDECL_Data.N), order='F'))[:,self.ilayer0]
+                V = np.array(V.reshape((3, Model3_ext.GRDECL_Data.N), order='F'))[:,self.ilayer0]
 
                 Ind_face0, Ind_face1 = Model3.compute_bdry_indices(direction=dir)
 

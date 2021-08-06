@@ -42,18 +42,27 @@ Model.GRDECL_Data.coarse2fine_ratio=[3]*3
 
 # 3.2 Create coarse grid and upscale porosity
 Model2=Model.create_coarse_model()
-Model.Upscale_Perm('TPFA_loc')
+# Model.Upscale_Perm('TPFA_loc')
 # Model2.plot_scalar("PORO",ITK=True).show(True)
 
 ind=36
 FGrid=Model.GRDECL_Data
 CGrid=Model2.GRDECL_Data
 Model3=Model.create_local_model(ind)
+Glob_ind1=Model.Upscaler.Glob_ind
 print(Model.Upscaler.Glob_ind)
-Model3.plot_scalar("PORO",ITK=True).show(True)
+# Model3.plot_scalar("PORO",ITK=True).show(True)
 
-nlayer=2
-Model3b=Model.create_local_model(ind,nlayer)
-Model3b.plot_scalar("PORO",ITK=True).show(True)
+Model.Upscaler.nlayer=1
+Model3b=Model.create_local_model(ind)
+# Model3b.plot_scalar("PORO",ITK=True).show(True)
+Glob_ind2=Model.Upscaler.Glob_ind
+print(Model.Upscaler.Glob_ind)
 
-# print(Model.Upscaler.Glob_ind)
+icommon=[]
+for i,ind in enumerate(Glob_ind2):
+    if ind in Glob_ind1:
+        icommon.append(i)
+
+print(icommon)
+print(Glob_ind2[icommon])
