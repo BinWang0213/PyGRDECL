@@ -200,9 +200,12 @@ class Upscaler:
                   varname=scalar + ": " + "harmonicz: min %3f - max %3f" %(m,M))
 
     def Upscale_TPFA_loc(self):
+        import sys
         CGrid = self.Coarse_Mod.GRDECL_Data
         print("[UPSCALING TPFA loc], nlayer:",self.nlayer)
         for ind in range(CGrid.N):
+            sys.stdout.write("Local computations for coarse cell: %d / %d \r" % (ind,CGrid.N))
+            sys.stdout.flush()
             nlayer = self.nlayer
             self.nlayer=0
             # print("local upscaling for block: ",ind)

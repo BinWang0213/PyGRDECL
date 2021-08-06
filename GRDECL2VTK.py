@@ -507,14 +507,12 @@ class GeologyModel:
         return nz
 
     # MZ::Add TPFA Pressure calculation
-    def compute_TPFA_Pressure(self,Press_inj=1,direction="i",Fault_opt=None):
+    def compute_TPFA_Pressure(self,Press_inj=1,direction="i",Fault_opt=None,Gmres=True):
         if "Pressure" not in self.GRDECL_Data.SpatialDatas:
             self.CreateCellData(varname="Pressure", val=1)
 
         mDarcy=9.869233e-16;
         Grid=self.GRDECL_Data
-        import scipy.sparse as SP
-        from scipy.sparse.linalg import spsolve
         Nx = Grid.NX;        Ny = Grid.NY;        Nz = Grid.NZ
         assert((Nx>1) and (Ny>1) and (Nz>1)),"TPFA not able to run for NX,NY,NZ<=1"
         N = Nx * Ny * Nz
@@ -620,11 +618,21 @@ class GeologyModel:
         set_dirichlet(N, diagonals, decs, q,Min_ind,  0)
         set_dirichlet(N, diagonals, decs, q, Max_ind, Press_inj)
 
-        # A = SP.spdiags(diagonals, dec, N, N, format='lil')
+        import scipy.sparse as SP
         A = SP.spdiags(diagonals, decs, N, N)
         A = A.tocsc()
         # print("start spsolve")
-        p = spsolve(A, q)
+        from scipy.sparse.linalg import spsolve, lgmres
+        # import time
+        # t0 = time.time()
+        if Gmres:
+            p, info=lgmres(A,q,tol=1e-17,maxiter=10000)
+            # print("lgmres solve ok if 0:",info)
+        else:
+            p = spsolve(A, q,permc_spec="MMD_AT_PLUS_A")
+            # print("direct spsolve")
+
+        # print("Elapsed time for solve: ", time.time() - t0)
         self.UpdateCellData(varname="Pressure", array=p)
 
     def computeGradP_V(self):
