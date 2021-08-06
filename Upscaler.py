@@ -1,5 +1,5 @@
 from utils import *
-import os
+import os,sys
 
 class Upscaler:
     def __init__(self):
@@ -13,6 +13,7 @@ class Upscaler:
         self.local_Mod_extended=None
         self.nlayer=0
         self.ilayer0=[]
+        self.localsize0=[]
         self.Glob_ind=[]
 
 
@@ -30,7 +31,7 @@ class Upscaler:
         stringloc='_Loc_'+str(ind)+"_nlayer_"+str(self.nlayer)
         self.local_Mod.fname = os.path.splitext(fineFname)[0] +stringloc+  os.path.splitext(fineFname)[1]
         self.Glob_ind,localsize=self.FineModel.GRDECL_Data.get_partition_indices(CGrid,self.nlayer,ind)
-        Glob_ind0, localsize0 = self.FineModel.GRDECL_Data.get_partition_indices(CGrid, nlayer=0, ind=ind)
+        Glob_ind0, self.localsize0 = self.FineModel.GRDECL_Data.get_partition_indices(CGrid, nlayer=0, ind=ind)
         self.ilayer0 = []
         for i, ind in enumerate(self.Glob_ind):
             if ind in Glob_ind0:
@@ -200,23 +201,18 @@ class Upscaler:
                   varname=scalar + ": " + "harmonicz: min %3f - max %3f" %(m,M))
 
     def Upscale_TPFA_loc(self):
-        import sys
         CGrid = self.Coarse_Mod.GRDECL_Data
         print("[UPSCALING TPFA loc], nlayer:",self.nlayer)
         for ind in range(CGrid.N):
-            sys.stdout.write("Local computations for coarse cell: %d / %d \r" % (ind,CGrid.N))
+            sys.stdout.write("Local computations for coarse cell: %d / %d \r" % (ind+1,CGrid.N))
             sys.stdout.flush()
-            nlayer = self.nlayer
-            self.nlayer=0
             # print("local upscaling for block: ",ind)
             Model3= self.FineModel.create_local_model(ind)
-            Nx = Model3.GRDECL_Data.NX
-            Ny = Model3.GRDECL_Data.NY
-            Nz = Model3.GRDECL_Data.NZ
-            N  = Model3.GRDECL_Data.N
-            dx = Model3.GRDECL_Data.DX
-            dy = Model3.GRDECL_Data.DY
-            dz = Model3.GRDECL_Data.DZ
+            Nx,Ny,Nz=self.localsize0
+            N  = Nx*Ny*Nz
+            dx = np.array(Model3.GRDECL_Data.DX)[self.ilayer0]
+            dy = np.array(Model3.GRDECL_Data.DY)[self.ilayer0]
+            dz = np.array(Model3.GRDECL_Data.DZ)[self.ilayer0]
 
             directions = ["i", "j", "k"]
             Lx = np.sum(dx[:Nx])
@@ -225,16 +221,15 @@ class Upscaler:
             Lxyz = [Lx, Ly, Lz]
             dxyz = [dx, dy, dz]
             scalars = ["PERMX", "PERMY", "PERMZ"]
-            # Add layers if necessary
-            self.nlayer=nlayer
-            Model3_ext= self.FineModel.create_local_model(ind)
             for i, dir in enumerate(directions):
-                Model3_ext.compute_TPFA_Pressure(Press_inj=1, direction=dir)
-                GradP, V = Model3_ext.computeGradP_V()
-                GradP =np.array( GradP.reshape((3, Model3_ext.GRDECL_Data.N), order='F'))[:,self.ilayer0]
-                V = np.array(V.reshape((3, Model3_ext.GRDECL_Data.N), order='F'))[:,self.ilayer0]
+                Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
+                GradP, V = Model3.computeGradP_V()
+                GradP =np.array( GradP.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
+                V = np.array(V.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
 
                 Ind_face0, Ind_face1 = Model3.compute_bdry_indices(direction=dir)
+                Ind_face0=[ind for ind in Ind_face0 if ind in self.Glob_ind[self.ilayer0] ]
+                Ind_face1=[ind for ind in Ind_face1 if ind in self.Glob_ind[self.ilayer0] ]
 
                 L = Lxyz[i]
                 A = Lxyz[(i + 1) % 3] * Lxyz[(i + 2) % 3]
@@ -290,16 +285,19 @@ class Upscaler:
     def Upscale_TPFA_loc_vol_average(self):
         FGrid=self.FineModel.GRDECL_Data
         CGrid = self.Coarse_Mod.GRDECL_Data
+        print("[UPSCALING TPFA loc volume average], nlayer:",self.nlayer)
+
         for ind in range(CGrid.N):
+            sys.stdout.write("Local computations for coarse cell: %d / %d \r" % (ind+1,CGrid.N))
+            sys.stdout.flush()
             Model3=self.FineModel.create_local_model(ind)
             # Model3 = self.local_Mod
-            Nx = Model3.GRDECL_Data.NX
-            Ny = Model3.GRDECL_Data.NY
-            Nz = Model3.GRDECL_Data.NZ
-            N = Model3.GRDECL_Data.N
-            dx = Model3.GRDECL_Data.DX
-            dy = Model3.GRDECL_Data.DY
-            dz = Model3.GRDECL_Data.DZ
+            Nx,Ny,Nz=self.localsize0
+            N  = Nx*Ny*Nz
+            dx = np.array(Model3.GRDECL_Data.DX)[self.ilayer0]
+            dy = np.array(Model3.GRDECL_Data.DY)[self.ilayer0]
+            dz = np.array(Model3.GRDECL_Data.DZ)[self.ilayer0]
+
             scalars = ["PERMX","PERMXY", "PERMXZ","PERMYX", "PERMY","PERMYZ","PERMZX","PERMZY","PERMZZ"]
             directions = ["i", "j", "k"]
             # Initialize local system to be solved
@@ -316,8 +314,8 @@ class Upscaler:
             for ind_sys,dir in enumerate(directions):
                 Model3.compute_TPFA_Pressure(Press_inj=1, direction=dir)
                 GradP, V = Model3.computeGradP_V()
-                GradP = GradP.reshape((3, Model3.GRDECL_Data.N),order='F')
-                V = V.reshape((3, Model3.GRDECL_Data.N),order='F')
+                GradP =np.array( GradP.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
+                V = np.array(V.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
                 for ivar in range(3):
                     Mean_GradPi = np.sum(GradP[ivar, :] *vol) /vol_tot
                     Mean_Vi = np.sum(V[ivar, :] *vol) /vol_tot
