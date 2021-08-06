@@ -489,6 +489,38 @@ class GeologyModel:
                         Max_ind.append(i+Grid.NX*(j+k*Grid.NY))
         return  Min_ind,Max_ind
 
+    def compute_bdry_indices(self,direction):
+        Grid=self.GRDECL_Data
+        Min_ind=[];        Max_ind=[]
+        rangeX=range(Grid.NX);        rangeY=range(Grid.NY);        rangeZ=range(Grid.NZ)
+        if (direction=="ijk"):
+            Min_ind=[0]
+            Max_ind=[Grid.N-1]
+        else:
+            # Min
+            if (direction == "i"):
+                rangeX = [0]
+            if (direction == "j"):
+                rangeY = [0]
+            if (direction == "k"):
+                rangeZ = [0]
+            for k in rangeZ:
+                for j in rangeY:
+                    for i in rangeX:
+                        Min_ind.append(i+Grid.NX*(j+k*Grid.NY))
+
+            # Max
+            if (direction == "i"):
+                rangeX = [Grid.NX-1]
+            if (direction == "j"):
+                rangeY = [Grid.NY-1]
+            if (direction == "k"):
+                rangeZ = [Grid.NZ-1]
+            for k in rangeZ:
+                for j in rangeY:
+                    for i in rangeX:
+                        Max_ind.append(i+Grid.NX*(j+k*Grid.NY))
+        return  Min_ind,Max_ind
     def nz_to_fault(self,ix):
         nz=0
         Grid=self.GRDECL_Data
@@ -866,6 +898,25 @@ def set_dirichlet(N,diagonals, decs,q, List_ind, value):
             diagonals[ind0, ind] = 1
         q[ind] = value;
 
-
+def compute_bdry_max_indices(localsize,direction):
+    Min_ind=[];        Max_ind=[]
+    NX,NY,NZ=localsize
+    rangeX=range(NX);        rangeY=range(NY);        rangeZ=range(NZ)
+    N=NX*NY*NZ
+    if (direction=="ijk"):
+        Max_ind=[N-1]
+    else:
+        # Max
+        if (direction == "i"):
+            rangeX = [NX-1]
+        if (direction == "j"):
+            rangeY = [NY-1]
+        if (direction == "k"):
+            rangeZ = [NZ-1]
+        for k in rangeZ:
+            for j in rangeY:
+                for i in rangeX:
+                    Max_ind.append(i+NX*(j+k*NY))
+    return  Max_ind
 
 

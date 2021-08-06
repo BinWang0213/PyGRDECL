@@ -7,14 +7,17 @@ class Upscaler:
         Fields and methods to upscale a geomodel
         """
         self.FineModel=None
+
         self.Coarse_Mod=None
         self.Coarse_Mod_Partition=[]
+
         self.local_Mod=None
-        self.local_Mod_extended=None
+        self.Glob_ind=[]
         self.nlayer=0
         self.ilayer0=[]
         self.localsize0=[]
-        self.Glob_ind=[]
+        self.indices_max_bdry0=[]
+
 
 
     def create_coarse_model(self):
@@ -32,6 +35,11 @@ class Upscaler:
         self.local_Mod.fname = os.path.splitext(fineFname)[0] +stringloc+  os.path.splitext(fineFname)[1]
         self.Glob_ind,localsize=self.FineModel.GRDECL_Data.get_partition_indices(CGrid,self.nlayer,ind)
         Glob_ind0, self.localsize0 = self.FineModel.GRDECL_Data.get_partition_indices(CGrid, nlayer=0, ind=ind)
+        self.indices_max_bdry0 = []
+        for idir,dir in enumerate(["i", "j", "k"]):
+            l= compute_bdry_max_indices(self.localsize0,dir)
+            self.indices_max_bdry0.append(l)
+
         self.ilayer0 = []
         for i, ind in enumerate(self.Glob_ind):
             if ind in Glob_ind0:
@@ -226,11 +234,7 @@ class Upscaler:
                 GradP, V = Model3.computeGradP_V()
                 GradP =np.array( GradP.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
                 V = np.array(V.reshape((3, Model3.GRDECL_Data.N), order='F'))[:,self.ilayer0]
-
-                Ind_face0, Ind_face1 = Model3.compute_bdry_indices(direction=dir)
-                Ind_face0=[ind for ind in Ind_face0 if ind in self.Glob_ind[self.ilayer0] ]
-                Ind_face1=[ind for ind in Ind_face1 if ind in self.Glob_ind[self.ilayer0] ]
-
+                Ind_face1=self.indices_max_bdry0[i]
                 L = Lxyz[i]
                 A = Lxyz[(i + 1) % 3] * Lxyz[(i + 2) % 3]
                 q = np.sum(
@@ -348,3 +352,25 @@ class Upscaler:
                 getattr(self, method)(scalar)
         else:
             getattr(self, "Upscale_" + upsc_methods[0])()
+
+
+def compute_bdry_max_indices(localsize,direction):
+    Min_ind=[];        Max_ind=[]
+    NX,NY,NZ=localsize
+    rangeX=range(NX);        rangeY=range(NY);        rangeZ=range(NZ)
+    N=NX*NY*NZ
+    if (direction=="ijk"):
+        Max_ind=[N-1]
+    else:
+        # Max
+        if (direction == "i"):
+            rangeX = [NX-1]
+        if (direction == "j"):
+            rangeY = [NY-1]
+        if (direction == "k"):
+            rangeZ = [NZ-1]
+        for k in rangeZ:
+            for j in rangeY:
+                for i in rangeX:
+                    Max_ind.append(i+NX*(j+k*NY))
+    return  Max_ind
