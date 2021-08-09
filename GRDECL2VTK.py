@@ -732,15 +732,15 @@ class GeologyModel:
            GradP[i,:,:,:]=GradP[i,:,:,:]/step
            V[i,:,:,:]    =-np.abs(K[i,:,:,:])*GradP[i,:,:,:]
 
-        #Save Velocity components
-        if "Vx" not in self.GRDECL_Data.SpatialDatas:
-            self.CreateCellData("Vx", val_array=V[0, :].ravel(order='F'))
-            self.CreateCellData("Vy", val_array=V[1, :].ravel(order='F'))
-            self.CreateCellData("Vz", val_array=V[2, :].ravel(order='F'))
-        else:
-            self.UpdateCellData("Vx", array=V[0, :].ravel(order='F'))
-            self.UpdateCellData("Vy", array=V[1, :].ravel(order='F'))
-            self.UpdateCellData("Vz", array=V[2, :].ravel(order='F'))
+        # #Save Velocity components
+        # if "Vx" not in self.GRDECL_Data.SpatialDatas:
+        #     self.CreateCellData("Vx", val_array=V[0, :].ravel(order='F'))
+        #     self.CreateCellData("Vy", val_array=V[1, :].ravel(order='F'))
+        #     self.CreateCellData("Vz", val_array=V[2, :].ravel(order='F'))
+        # else:
+        #     self.UpdateCellData("Vx", array=V[0, :].ravel(order='F'))
+        #     self.UpdateCellData("Vy", array=V[1, :].ravel(order='F'))
+        #     self.UpdateCellData("Vz", array=V[2, :].ravel(order='F'))
         return GradP,V
 
     def plot_scalar(self, scalar,ITK=True,ext='vtu',slicing=False):
@@ -751,14 +751,8 @@ class GeologyModel:
             warnings.warn("No vtk notebook viewer module pyvista loaded.")
         import os
 
-        # 2Convert to vtk hexaedron based unstruct grid data
+        # Convert to vtk hexaedron unstruct grid data
         self.GRDECL2VTK()
-        # Add velocity if computed
-        if "Vx" in self.GRDECL_Data.SpatialDatas:
-            V=np.vstack((self.GRDECL_Data.SpatialDatas["Vx"],\
-                         self.GRDECL_Data.SpatialDatas["Vy"],\
-                         self.GRDECL_Data.SpatialDatas["Vz"]))
-        self.AppendVectorData2VTK("V",V)
         # Write GRDECL cartesian model to vtk file
         self.Write2VTU()
 
@@ -784,7 +778,7 @@ class GeologyModel:
             pl.add_mesh(mesh, scalars=scalar)
         return pl
 
-    def plot_streamlines(self, notebook=True,scalar=None,ext='vtu',source_radius=200):
+    def plot_streamlines(self, notebook=True,scalar=None,ext='vtu',source_radius=50):
         try:
             import pyvista as pv
         except ImportError:
@@ -795,12 +789,9 @@ class GeologyModel:
         # 2Convert to vtk hexaedron based unstruct grid data
         self.GRDECL2VTK()
         # Add velocity if computed
-        assert "Vx" in self.GRDECL_Data.SpatialDatas,\
-            "[PLOT STREAMLINES] No Velocity to be plotted"
-        V=np.vstack((self.GRDECL_Data.SpatialDatas["Vx"],\
-             self.GRDECL_Data.SpatialDatas["Vy"],\
-             self.GRDECL_Data.SpatialDatas["Vz"]))
-
+        assert "Pressure" in self.GRDECL_Data.SpatialDatas,\
+            "[PLOT STREAMLINES] No Pressure for streamlines to be plotted"
+        G,V=self.computeGradP_V()
         self.AppendVectorData2VTK("V",V)
         # Write GRDECL cartesian model to vtk file
         self.Write2VTU()
@@ -817,8 +808,8 @@ class GeologyModel:
         streamlines, src = mesh.streamlines(
             return_source=True,
             max_time=1000.0,
-            initial_step_length=0.2,
-            terminal_speed=1e-12,
+            initial_step_length=0.002,
+            terminal_speed=1e-9,
             n_points=100,
             source_radius=source_radius,
             source_center=np.array(mesh.center),
