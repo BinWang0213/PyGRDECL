@@ -477,40 +477,40 @@ class GeologyModel:
                         list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
                 list_ind.append(list_tmp)
 
-            if (direction == "j"):
-                list_ind = []
-                list_ratio = [0]
-                rangeX1 = [0, Grid.NX - 1]
-                rangeX2 = range(1, Grid.NX - 1)
+        if (direction == "j"):
+            list_ind = []
+            list_ratio = [0]
+            rangeX1 = [0, Grid.NX - 1]
+            rangeX2 = range(1, Grid.NX - 1)
 
-                rangeZ2 = [0, Grid.NZ - 1]
-                for j in rangeY:
-                    list_tmp = []
-                    for k in rangeZ:
-                        for i in rangeX1:
-                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
-                    for k in rangeZ2:
-                        for i in rangeX2:
-                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
-                    list_ind.append(list_tmp)
-
-            if (direction == "k"):
-                list_ind = []
-                list_ratio = [0]
-                rangeY1 = [0, Grid.NY - 1]
-                rangeY2 = range(1, Grid.NY - 1)
-
-                rangeX2 = [0, Grid.NX - 1]
+            rangeZ2 = [0, Grid.NZ - 1]
+            for j in rangeY:
+                list_tmp = []
                 for k in rangeZ:
-                    list_tmp = []
-                    for i in rangeX:
-                        for j in rangeY1:
-                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                    for i in rangeX1:
+                        list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                for k in rangeZ2:
                     for i in rangeX2:
-                        for j in rangeY2:
-                            list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
-                    list_ind.append(list_tmp)
-            return list_ind
+                        list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                list_ind.append(list_tmp)
+
+        if (direction == "k"):
+            list_ind = []
+            list_ratio = [0]
+            rangeY1 = [0, Grid.NY - 1]
+            rangeY2 = range(1, Grid.NY - 1)
+
+            rangeX2 = [0, Grid.NX - 1]
+            for k in rangeZ:
+                list_tmp = []
+                for i in rangeX:
+                    for j in rangeY1:
+                        list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                for i in rangeX2:
+                    for j in rangeY2:
+                        list_tmp.append(i + Grid.NX * (j + k * Grid.NY))
+                list_ind.append(list_tmp)
+        return list_ind
 
 
     def compute_bdry_indices(self,direction):
@@ -573,8 +573,7 @@ class GeologyModel:
         mDarcy=9.869233e-16;
         Grid=self.GRDECL_Data
         Nx = Grid.NX;        Ny = Grid.NY;        Nz = Grid.NZ
-        dims=[Nx,Ny,Nz]
-        assert((Nx>1) and (Ny>1) and (Nz>1)),"TPFA not able to run for NX,NY,NZ<=1"
+        assert((Nx>1) and (Ny>1) and (Nz>1)),"[TPFA] not able to run for NX,NY,NZ<=1"
         N = Nx * Ny * Nz
         self.buildDXDYDZTOPS()
         Dx = Grid.DX;        Dy = Grid.DY;        Dz = Grid.DZ
@@ -666,39 +665,37 @@ class GeologyModel:
 
         decs = [-Ny * Nx, -Nx, -1, 0, 1, Nx, Ny * Nx]
 
+        # Add modified transmissibilities at fault drop
         if faultDrop and nz>1:
             diagonals=np.vstack((diagonals, -xfault1));
             diagonals=np.vstack((diagonals, -xfault2));
-            # dec.append(-nz*Nx*Ny)
-            # dec.append( nz*Nx*Ny)
             decs.append(-decfault)
             decs.append( decfault)
 
+        # Add Dirichlet BC
         Min_ind,Max_ind=self.compute_bdry_indices(direction)
         set_dirichlet(N, diagonals, decs, q,Min_ind,  0)
         set_dirichlet(N, diagonals, decs, q, Max_ind, Press_inj)
+        dims=[Nx,Ny,Nz]
         if Lin_BC:
             list_ind=self.set_lin_Pressure_ind_val(direction)
             idir= ['i','j','k'].index(direction)
             for ind_val_pressure in range(dims[idir]):
+                list_ind_local=list_ind[ind_val_pressure]
                 val=float(ind_val_pressure/(dims[idir]-1))
-                set_dirichlet(N, diagonals, decs, q, list_ind[ind_val_pressure], val)
+                set_dirichlet(N, diagonals, decs, q, list_ind_local, val)
 
+        # Solve linear system
         import scipy.sparse as SP
         A = SP.spdiags(diagonals, decs, N, N)
         A = A.tocsc()
-        # print("start spsolve")
         from scipy.sparse.linalg import spsolve, lgmres
-        # import time
-        # t0 = time.time()
         if Gmres:
             p, info=lgmres(A,q,tol=1e-17,maxiter=10000)
-            # print("lgmres solve ok if 0:",info)
         else:
             p = spsolve(A, q,permc_spec="MMD_AT_PLUS_A")
-            # print("direct spsolve")
 
-        # print("Elapsed time for solve: ", time.time() - t0)
+        # Update Pressure values
         self.UpdateCellData(varname="Pressure", array=p)
 
     def computeGradP_V(self):

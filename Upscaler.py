@@ -17,7 +17,7 @@ class Upscaler:
         self.ilayer0=[]
         self.localsize0=[]
         self.indices_max_bdry0=[]
-        self.Lin_BC=True
+        self.Lin_BC=False
 
 
     def create_coarse_model(self):
