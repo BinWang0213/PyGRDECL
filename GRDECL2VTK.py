@@ -781,10 +781,10 @@ class GeologyModel:
                 slices[name] = mesh.slice(origin=point, normal=normal)
                 pl.add_mesh(slices, scalars=scalar)
         else:
-            pl.add_mesh(mesh, scalars=scalar,opacity=0.15)
+            pl.add_mesh(mesh, scalars=scalar)
         return pl
 
-    def plot_streamlines(self, scalar=None,ITK=False,ext='vtu',source_radius=200):
+    def plot_streamlines(self, notebook=True,scalar=None,ext='vtu',source_radius=200):
         try:
             import pyvista as pv
         except ImportError:
@@ -811,10 +811,7 @@ class GeologyModel:
         # Transfer cell data to point for streamlines
         mesh = mesh.cell_data_to_point_data("V")
 
-        if ITK:
-            pl = pv.PlotterITK()
-        else:
-            pl = pv.Plotter(notebook=False)
+        pl = pv.Plotter(notebook=notebook)
         pv.set_plot_theme('paraview')
         mesh.set_active_scalars("V")
         streamlines, src = mesh.streamlines(
@@ -827,11 +824,10 @@ class GeologyModel:
             source_center=np.array(mesh.center),
         )
         pl.add_mesh(mesh.outline(), color="k")
-        sargs = dict(vertical=True, title_font_size=16)
-        pl.add_mesh(streamlines.tube(radius=3), scalar_bar_args=sargs)
+        pl.add_mesh(streamlines.tube(radius=3),color="w")
         pl.add_mesh(src)
         if scalar:
-            pl.add_mesh(mesh, scalars=scalar)
+            pl.add_mesh(mesh, scalars=scalar,cmap="viridis",opacity=0.1)
         return pl
 
     def two_plots_scalar(self, scalar,ext='vtu'):
