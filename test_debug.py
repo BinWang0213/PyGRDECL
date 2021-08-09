@@ -16,8 +16,10 @@ Model=GeologyModel()
 Model.buildCPGGrid(physDims,gridDims,opt)
 
 # 1.5 Compute First TPFA (block centered) Pressure values
-Model.compute_TPFA_Pressure(Press_inj=1,direction="j",Fault_opt=opt,Lin_BC=True )
-# # Model.plot_scalar("PORO",ITK=True).show()
+Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt,Lin_BC=True )
+Model.computeGradP_V()
+
+Model.plot_scalar("PORO")
 #
 #
 # from utils import *

@@ -202,7 +202,6 @@ class GeologyModel:
         for keyword,data in self.GRDECL_Data.SpatialDatas.items():
             self.AppendScalarData2VTK(keyword,data) #VTK will automatically overwrite the data with the same keyword
 
-
     def decomposeModel(self):
         '''#* Identify and extract boundary/falut faces
 
@@ -418,6 +417,14 @@ class GeologyModel:
         data.SetName(str(name))
         data.SetNumberOfComponents(1)
         self.VTK_Grids.GetCellData().AddArray(data)
+
+    def AppendVectorData2VTK(self,name,numpy_array):
+        #* Append vector cell data (numpy array) into vtk object, should not directly called by user
+        data = ns.numpy_to_vtk(numpy_array.ravel(order='F'),deep=True, array_type=vtk.VTK_FLOAT)
+        data.SetName(str(name))
+        data.SetNumberOfComponents(3)
+        data.SetNumberOfTuples(self.GRDECL_Data.N)
+        self.VTK_Grids.GetCellData().SetVectors(data)
 
     #####################################################################
     # MZ::GRDECL cartesian writer functions
@@ -724,11 +731,8 @@ class GeologyModel:
         for i,step in enumerate([dx,dy,dz]):
            GradP[i,:,:,:]=GradP[i,:,:,:]/step
            V[i,:,:,:]    =-np.abs(K[i,:,:,:])*GradP[i,:,:,:]
-        # self.GRDECL2VTK()
-        # # self.Fetch_Points_from_cells("V_Points", V)
-        # # self.Fetch_Points_from_cells("VyPoints", V[1, :, :])
-        # # self.Fetch_Points_from_cells("VzPoints", V[2, :, :])
-        #
+
+        #Save Velocity components
         if "Vx" not in self.GRDECL_Data.SpatialDatas:
             self.CreateCellData("Vx", val_array=V[0, :].ravel(order='F'))
             self.CreateCellData("Vy", val_array=V[1, :].ravel(order='F'))
@@ -737,10 +741,9 @@ class GeologyModel:
             self.UpdateCellData("Vx", array=V[0, :].ravel(order='F'))
             self.UpdateCellData("Vy", array=V[1, :].ravel(order='F'))
             self.UpdateCellData("Vz", array=V[2, :].ravel(order='F'))
-        # V=  np.array(np.gradient(p))
         return GradP,V
 
-    def plot_scalar(self, scalar,ITK=True,ext='vtu'):
+    def plot_scalar(self, scalar,ITK=True,ext='vtu',slicing=False):
         try:
             import pyvista as pv
         except ImportError:
@@ -750,17 +753,85 @@ class GeologyModel:
 
         # 2Convert to vtk hexaedron based unstruct grid data
         self.GRDECL2VTK()
+        # Add velocity if computed
+        if "Vx" in self.GRDECL_Data.SpatialDatas:
+            V=np.vstack((self.GRDECL_Data.SpatialDatas["Vx"],\
+                         self.GRDECL_Data.SpatialDatas["Vy"],\
+                         self.GRDECL_Data.SpatialDatas["Vz"]))
+        self.AppendVectorData2VTK("V",V)
         # Write GRDECL cartesian model to vtk file
         self.Write2VTU()
 
         # Plot vtk data
         filename = os.path.splitext(self.fname)[0] + '.' + ext
         mesh = pv.read(filename)
+        if ITK and (not slicing):
+            pl = pv.PlotterITK()
+        else:
+            pl = pv.Plotter(notebook=False)
+
+        if slicing:
+            point = np.array(mesh.center)
+            increment = np.pi / 2.
+            # use a container to hold all the slices
+            slices = pv.MultiBlock()  # treat like a dictionary/list
+            for theta in np.arange(0, np.pi, increment):
+                normal = np.array([np.cos(theta), np.sin(theta), 0.0]).dot(np.pi / 2.)
+                name = f'Bearing: {np.rad2deg(theta):.2f}'
+                slices[name] = mesh.slice(origin=point, normal=normal)
+                pl.add_mesh(slices, scalars=scalar)
+        else:
+            pl.add_mesh(mesh, scalars=scalar,opacity=0.15)
+        return pl
+
+    def plot_streamlines(self, scalar=None,ITK=False,ext='vtu',source_radius=200):
+        try:
+            import pyvista as pv
+        except ImportError:
+            import warnings
+            warnings.warn("No vtk notebook viewer module pyvista loaded.")
+        import os
+
+        # 2Convert to vtk hexaedron based unstruct grid data
+        self.GRDECL2VTK()
+        # Add velocity if computed
+        assert "Vx" in self.GRDECL_Data.SpatialDatas,\
+            "[PLOT STREAMLINES] No Velocity to be plotted"
+        V=np.vstack((self.GRDECL_Data.SpatialDatas["Vx"],\
+             self.GRDECL_Data.SpatialDatas["Vy"],\
+             self.GRDECL_Data.SpatialDatas["Vz"]))
+
+        self.AppendVectorData2VTK("V",V)
+        # Write GRDECL cartesian model to vtk file
+        self.Write2VTU()
+
+        # Plot vtk data
+        filename = os.path.splitext(self.fname)[0] + '.' + ext
+        mesh = pv.read(filename)
+        # Transfer cell data to point for streamlines
+        mesh = mesh.cell_data_to_point_data("V")
+
         if ITK:
             pl = pv.PlotterITK()
         else:
-            pl = pv.Plotter()
-        pl.add_mesh(mesh, scalars=scalar)
+            pl = pv.Plotter(notebook=False)
+        pv.set_plot_theme('paraview')
+        mesh.set_active_scalars("V")
+        streamlines, src = mesh.streamlines(
+            return_source=True,
+            max_time=1000.0,
+            initial_step_length=0.2,
+            terminal_speed=1e-12,
+            n_points=100,
+            source_radius=source_radius,
+            source_center=np.array(mesh.center),
+        )
+        pl.add_mesh(mesh.outline(), color="k")
+        sargs = dict(vertical=True, title_font_size=16)
+        pl.add_mesh(streamlines.tube(radius=3), scalar_bar_args=sargs)
+        pl.add_mesh(src)
+        if scalar:
+            pl.add_mesh(mesh, scalars=scalar)
         return pl
 
     def two_plots_scalar(self, scalar,ext='vtu'):
