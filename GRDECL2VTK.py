@@ -743,7 +743,7 @@ class GeologyModel:
         #     self.UpdateCellData("Vz", array=V[2, :].ravel(order='F'))
         return GradP,V
 
-    def plot_scalar(self, scalar,ITK=True,ext='vtu',slicing=False):
+    def plot_scalar(self, scalar=None,ITK=True,ext='vtu',slicing=False,add_log_scale=False):
         try:
             import pyvista as pv
         except ImportError:
@@ -751,7 +751,14 @@ class GeologyModel:
             warnings.warn("No vtk notebook viewer module pyvista loaded.")
         import os
 
-        # Convert to vtk hexaedron unstruct grid data
+        # Option:Add/Update log10 fields
+        if add_log_scale:
+            self.CreateCellData(scalar+"LOG10", val_array=np.log10(self.GRDECL_Data.SpatialDatas[scalar]))
+        for val in self.GRDECL_Data.SpatialDatas:
+            if val[-5:]=="LOG10": self.UpdateCellData(val,array=np.log10(self.GRDECL_Data.SpatialDatas[val[:-5]]))
+
+
+        # Convert to vtk unstructured grid data
         self.GRDECL2VTK()
         # Write GRDECL cartesian model to vtk file
         self.Write2VTU()
@@ -786,6 +793,9 @@ class GeologyModel:
             warnings.warn("No vtk notebook viewer module pyvista loaded.")
         import os
 
+        for val in self.GRDECL_Data.SpatialDatas:
+            if val[-5:] == "LOG10": self.UpdateCellData(val, array=np.log10(self.GRDECL_Data.SpatialDatas[val[:-5]]))
+
         # 2Convert to vtk hexaedron based unstruct grid data
         self.GRDECL2VTK()
         # Add velocity if computed
@@ -818,7 +828,12 @@ class GeologyModel:
         pl.add_mesh(streamlines.tube(radius=3),color="w")
         pl.add_mesh(src)
         if scalar:
-            pl.add_mesh(mesh, scalars=scalar,cmap="viridis",opacity=0.1)
+            pl.add_mesh(mesh, scalars=scalar,cmap="viridis",opacity=0.05)
+        pl.camera_position = 'xz'
+        pl.camera.roll += 10
+        pl.camera.elevation += 10
+        pl.show_axes()
+
         return pl
 
     def two_plots_scalar(self, scalar,ext='vtu'):
