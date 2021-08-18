@@ -73,12 +73,13 @@ def Cartesian2UnstructGrid(DX,DY,DZ,TOPS,NX,NY,NZ):
     return coordX,coordY,coordZ
 
 #Create random permeability field
-def logNormLayers(gridDims,AvgLayerPerm,poro_const=0.05):
+def logNormLayers(gridDims,AvgLayerPerm,poro_const=0.05,visu_layers=False):
     import scipy.ndimage as ndimage
     import matplotlib.pyplot as plt
-    
+    AvgLayerPerm = thicken_layers(gridDims[2], AvgLayerPerm)
     assert len(AvgLayerPerm)==gridDims[2], "[Error] AvgLayerPerm size is not equal to model layers!\n"
-    
+    print("[logNormLayers] Filling K and Phi Z layers with log normal distributions")
+
     NumLayers=gridDims[2]
     K=[]
     for li in range(NumLayers):
@@ -89,54 +90,112 @@ def logNormLayers(gridDims,AvgLayerPerm,poro_const=0.05):
         k=np.exp( 2 + 2*k)
         
         K.append(AvgLayerPerm[li]*k/np.mean(k))
-        print("Layer%d Perm Avg=%lf min=%lf max=%lf" %(li+1,np.average(K[li]),np.min(K[li]),np.max(K[li])))
+        if (visu_layers):
+            print("Layer%d Perm Avg=%lf min=%lf max=%lf" %(li+1,np.average(K[li]),np.min(K[li]),np.max(K[li])))
     
     #Plot the permeability
-    NumRows=int(NumLayers/3)+1
-    fig, axs = plt.subplots(NumRows,3, figsize=(4*3, NumRows*3), facecolor='w', edgecolor='k')
-    #fig.subplots_adjust(hspace = .01, wspace=.001)
+    if (visu_layers):
+        NumRows=int(NumLayers/3)+1
+        fig, axs = plt.subplots(NumRows,3, figsize=(4*3, NumRows*3), facecolor='w', edgecolor='k')
+        #fig.subplots_adjust(hspace = .01, wspace=.001)
 
-    axs = axs.ravel()
-    for li in range(NumLayers):
-        logperm=np.log10(K[li])
-        #logperm=K[li]
-        im=axs[li].imshow(logperm, interpolation='nearest',origin='lower',cmap='jet',
-                          #vmin=np.min(K),vmax=np.max(K))
-                          vmin=np.min(np.log10(K)),vmax=np.max(np.log10(K)))
-        axs[li].set(title='Random Log(perm) Layer%d'%(li+1), xticks=[], yticks=[])
+        axs = axs.ravel()
+        for li in range(NumLayers):
+            logperm=np.log10(K[li])
+            #logperm=K[li]
+            im=axs[li].imshow(logperm, interpolation='nearest',origin='lower',cmap='jet',
+                              #vmin=np.min(K),vmax=np.max(K))
+                              vmin=np.min(np.log10(K)),vmax=np.max(np.log10(K)))
+            axs[li].set(title='Random Log(perm) Layer%d'%(li+1), xticks=[], yticks=[])
 
-    for ax in axs:
-        ax.set(xticks=[], yticks=[])
+        for ax in axs:
+            ax.set(xticks=[], yticks=[])
 
-    
-    #fig.tight_layout()
-    cbar = fig.colorbar(im, ax=axs.ravel().tolist(), shrink=0.95)
-    plt.show()
+
+        #fig.tight_layout()
+        cbar = fig.colorbar(im, ax=axs.ravel().tolist(), shrink=0.95)
+        plt.show()
     
     #Genetrate random porosity field using phi=0.25*K^0.11
     phi=[]
     for li in range(NumLayers):
         phi.append(poro_const*np.log(K[li]))
-        print("Layer%d Poro Avg=%lf min=%lf max=%lf" %(li+1,np.average(phi[li]),np.min(phi[li]),np.max(phi[li])))
+        if visu_layers:
+            print("Layer%d Poro Avg=%lf min=%lf max=%lf" %(li+1,np.average(phi[li]),np.min(phi[li]),np.max(phi[li])))
 
     #Plot the Porosity
-    #NumRows=max([int(NumLayers/3),1])
-    fig, axs = plt.subplots(NumRows,3, figsize=(4*3, NumRows*3), facecolor='w', edgecolor='k')
-    #fig.subplots_adjust(hspace = .01, wspace=.001)
+    if (visu_layers):
+        #NumRows=max([int(NumLayers/3),1])
+        fig, axs = plt.subplots(NumRows,3, figsize=(4*3, NumRows*3), facecolor='w', edgecolor='k')
+        #fig.subplots_adjust(hspace = .01, wspace=.001)
 
-    axs = axs.ravel()
-    for li in range(NumLayers):
-        im=axs[li].imshow(phi[li], interpolation='nearest',origin='lower',cmap='jet',
-                          vmin=np.min(phi),vmax=np.max(phi))
-        axs[li].set(title='Random Porosity Layer%d'%(li+1), xticks=[], yticks=[])
-    
-    for ax in axs:
-        ax.set(xticks=[], yticks=[])
-    
-    
-    #fig.tight_layout()
-    cbar = fig.colorbar(im, ax=axs.ravel().tolist(), shrink=0.95)
-    plt.show()
+        axs = axs.ravel()
+        for li in range(NumLayers):
+            im=axs[li].imshow(phi[li], interpolation='nearest',origin='lower',cmap='jet',
+                              vmin=np.min(phi),vmax=np.max(phi))
+            axs[li].set(title='Random Porosity Layer%d'%(li+1), xticks=[], yticks=[])
+
+        for ax in axs:
+            ax.set(xticks=[], yticks=[])
+
+
+        #fig.tight_layout()
+        cbar = fig.colorbar(im, ax=axs.ravel().tolist(), shrink=0.95)
+        plt.show()
     
     #Flatten K and phi into x,y,z GRDECL convention order
     return np.array([i for k in K for i in k.flatten()]),np.array([i for fi in phi for i in fi.flatten()])
+
+# MZ inclined log normal layers
+# Create random permeability field
+def logNormLayers_basc(gridDims, AvgLayerPerm, poro_const=0.05):
+    import scipy.ndimage as ndimage
+    import matplotlib.pyplot as plt
+    AvgLayerPerm = thicken_layers(gridDims[2], AvgLayerPerm)
+    [Nx,Ny,Nz]=gridDims
+    assert len(AvgLayerPerm) == gridDims[2], "[Error] AvgLayerPerm size is not equal to model layers!\n"
+    assert gridDims[0]>=gridDims[2], "[Error] AvgLayerPerm Basc only if Nx>Nz!\n"
+    print("[logNormLayers] Filling K and Phi Z layers with log normal distributions")
+    NumLayers = gridDims[2]
+    K   = np.zeros((gridDims),dtype=float)+10
+    phi = np.zeros((gridDims),dtype=float)
+    for li in range(NumLayers):
+        # Genetrate random field using gaussian smmoth, see logNormLayers.M in MRST
+        raw_data = np.random.randn(li+1, gridDims[1])
+        raw_data -= 0.05 * np.random.randn(1)[0]
+        k = ndimage.gaussian_filter(raw_data, 3.5)
+        k = np.exp(2 + 2 * k)
+        for i in range(li+1):
+                K[i,:,li-i]=AvgLayerPerm[li] *k[i,:]/ np.mean(k)
+                phi[i,:,li-i]=poro_const*np.log(K[i,:,li-i])
+                K[Nx-1-i,:,Nz-1-li+i]=AvgLayerPerm[li] *k[i,:]/ np.mean(k)
+                phi[Nx-1-i,:,Nz-1-li+i]=poro_const*np.log(K[i,:,li-i])
+
+    print("[logNormLayers] Done")
+    # Flatten K and phi into x,y,z GRDECL convention order
+    return K.reshape((-1),order="F"),phi.reshape((-1),order="F")
+
+
+def thicken_layers(Nz,K_LayerPerm):
+    AvgLayerPerm = [1000] * Nz
+    ibase = -1
+    for i in range(Nz):
+        if (i % (Nz // len(K_LayerPerm))) == 0: ibase += 1
+        ibase = min(len(K_LayerPerm) - 1, ibase)
+        AvgLayerPerm[i] = K_LayerPerm[ibase]
+    return AvgLayerPerm
+
+# MZ: Plot histogram at logscale
+import matplotlib.pyplot as plt
+def plot_hist(Kvect,varname=""):
+    hist, bins = np.histogram(Kvect, bins=30);
+    # Lognormal distribution
+    logbins = np.logspace(np.log10(bins[0]),np.log10(bins[-1]),len(bins))
+
+    fig, axs = plt.subplots(1,1, figsize=(10, 5), facecolor='w', edgecolor='k')
+    fig.subplots_adjust(hspace = .5, wspace=.001)
+
+    axs.set_title(varname)
+    axs.hist(Kvect, bins=logbins, edgecolor='black', linewidth=1.2)
+    plt.xscale('log')
+    plt.show()
