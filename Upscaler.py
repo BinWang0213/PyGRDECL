@@ -47,12 +47,15 @@ class Upscaler:
         self.FineModel.GRDECL_Data.fill_local_grid(self.local_Mod,self.Coarse_Mod_Partition,ind,self.Glob_ind,localsize)
         return self.local_Mod
 
-    def list_upscaling_methods(self):
-        mean_methods = ['Arithmetic', 'Geometric', 'Harmonic', 'Harmx', 'Harmy', 'Harmz']
-        upsc_methods = [s + "_mean" for s in mean_methods]
-
-        tpfa_methods = ['loc', 'glob', 'loc_vol_average']
-        upsc_methods += ["TPFA_" + s for s in tpfa_methods]
+    def list_upscale_methods(self):
+        upsc_methods = [upsc_methods for upsc_methods
+                            in [method_name for method_name in dir(self)] if
+                            upsc_methods[0:len("Upscale")] == "Upscale"]
+        # mean_methods = ['Arithmetic', 'Geometric', 'Harmonic', 'Harmx', 'Harmy', 'Harmz']
+        # upsc_methods = [s + "_mean" for s in mean_methods]
+        #
+        # tpfa_methods = ['loc', 'glob', 'loc_vol_average']
+        # upsc_methods += ["TPFA_" + s for s in tpfa_methods]
         return upsc_methods
 
     def Upscale_Arithmetic_mean(self, scalar):

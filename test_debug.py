@@ -22,23 +22,28 @@ Model.computeGradP_V()
 Model.plot_scalar("PORO")
 #
 #
-# from utils import *
-#
-# # 2.1 Create random perm field with normal distribution for each layer
-# K_LayerPerm=[100,1000,10]
-# # K,phi=logNormLayers(gridDims,K_LayerPerm,poro_const=0.05)
-# K,phi=logNormLayers_basc(gridDims,K_LayerPerm,poro_const=0.05)
-#
-# # 2.2 Update porosity/permeability fields
-# Update_fields=["PORO","PERMX","PERMY","PERMZ"]
-# Update_values=[ phi  , K     , K     , 0.1*K ]
-# Model.UpdateListCellData(var_list=Update_fields,array_list=Update_values)
-#
-# # 2.3 Compute TPFA (block centered) Pressure values
-# # Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
-# # Model.plot_scalar("Pressure",ITK=True).show()
-#
-#
+from utils import *
+
+# 2.1 Create random perm field with normal distribution for each layer
+K_LayerPerm=[100,1000,10]
+# K,phi=logNormLayers(gridDims,K_LayerPerm,poro_const=0.05)
+K,phi=logNormLayers_basc(gridDims,K_LayerPerm,poro_const=0.05)
+
+# 2.2 Update porosity/permeability fields
+Update_fields=["PORO","PERMX","PERMY","PERMZ"]
+Update_values=[ phi  , K     , K     , 0.1*K ]
+Model.UpdateListCellData(var_list=Update_fields,array_list=Update_values)
+
+# 2.3 Visualize Fine scale histogram
+for scalar in ["PORO","PERMX"]:
+    Model.GRDECL_Data.Plot_hist(scalar,text="Fine scale")
+
+
+# 2.3 Compute TPFA (block centered) Pressure values
+Model.compute_TPFA_Pressure(Press_inj=1,direction="i",Fault_opt=opt )
+Model.plot_scalar("Pressure",ITK=True).show()
+
+
 # # 3.1 Set coarsening factor (grid dimensions of coarse cells)
 # Model.GRDECL_Data.coarse2fine_ratio=[3]*3
 #

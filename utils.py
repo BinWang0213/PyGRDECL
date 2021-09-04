@@ -175,6 +175,14 @@ def logNormLayers_basc(gridDims, AvgLayerPerm, poro_const=0.05):
     # Flatten K and phi into x,y,z GRDECL convention order
     return K.reshape((-1),order="F"),phi.reshape((-1),order="F")
 
+def logNormLayers_mixed_basc_horiz(gridDims, AvgLayerPerm, poro_const=0.05,Zcut_ratio=0.5):
+    K0, phi0 = logNormLayers(gridDims, AvgLayerPerm, poro_const=poro_const)
+    K, phi = logNormLayers_basc(gridDims, AvgLayerPerm, poro_const=poro_const)
+    Nx,Ny,Nz=gridDims; N=Nx*Ny*Nz
+    Ncut=int(N // (1/Zcut_ratio))
+    phi[Ncut:] = phi0[Ncut:]
+    K[Ncut:] = K0[Ncut:]
+    return K.reshape((-1),order="F"),phi.reshape((-1),order="F")
 
 def thicken_layers(Nz,K_LayerPerm):
     AvgLayerPerm = [1000] * Nz

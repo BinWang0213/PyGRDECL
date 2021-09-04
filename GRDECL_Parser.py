@@ -1650,8 +1650,13 @@ class GRDECL_Parser:
     def Plot_hist(self,scalar,text=""):
         m = np.min(self.SpatialDatas[scalar])
         M = np.max(self.SpatialDatas[scalar])
+        if scalar[0:4]=="PERM":
+            scalar2=scalar+"(mD)"
+        else:
+            scalar2=scalar
+
         plot_hist(self.SpatialDatas[scalar], \
-                  varname=scalar + ": " + text+" min %3f - max %3f" % (m, M))
+                  varname=scalar2 + ": " + text+" min %3f - max %3f" % (m, M))
 #############################################
 #
 #  Auxiliary function
