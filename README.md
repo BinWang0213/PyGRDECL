@@ -1,9 +1,9 @@
-PyUpsc_3D: A Python-based Corner Point Grid Upscaling Library
+PyGRDECL_Upsc_3D: A Python-based Corner Point Grid Upscaling Library
 =========================================================================
 Mustapha Zakari(zakari1@univ-lorraine.fr)<br>
 *CNRS, Observatoire Terre et environnement de Lorraine, RING TEAM, Nancy*
 
-`PyUpsc_3D` is an open source library for testing upscaling algorithms on cartesian and corner point grids. 
+`PyGRDECL_Upsc_3D` is an open source library for testing upscaling algorithms on cartesian and corner point grids. 
 It is based on PyGRDECL for CPG visualization with vtk based visualizers (here pyvista). 
 PyGRDECL is a light-weight open source library developped by Bin Wang (binwang.0213@gmail.com), Craft and Hawkins Department of Petroleum Engineering, US.
 
@@ -21,11 +21,11 @@ pip install vtk pyvista itkwidgets
 conda install shapely
 pip install https://github.com/enthought/mayavi/zipball/master
 
-#For windows users with python3.8 PyUpsc_3D can be directly installed and launched using the "install.bat" and "start.bat" files.
+#For windows users with python3.8 PyGRDECL_Upsc_3D can be directly installed and launched using the "install.bat" and "start.bat" files.
 ```
 
 # License
-PyGRDECL and PyUpsc_3D are released under the terms of the BSD license, and thus free for commercial and research use. Feel free to use these codes into your own project with a PROPER REFERENCE.  
+PyGRDECL and PyGRDECL_Upsc_3D are released under the terms of the BSD license, and thus free for commercial and research use. Feel free to use these codes into your own project with a PROPER REFERENCE.  
 
 M.Zakari, PyUpsc_3D A Python-based Corner Point Grid Upscaling Library (2021), GitHub repository, https://github.com/mzakari31/PyGRDECL
 B. Wang, PyGRDECL A Python-based GRDECL Visualization Library, (2018), GitHub repository, https://github.com/BinWang0213/PyGRDECL
