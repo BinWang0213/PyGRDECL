@@ -829,9 +829,9 @@ class GeologyModel:
         pl.add_mesh(src)
         if scalar:
             pl.add_mesh(mesh, scalars=scalar,cmap="viridis",opacity=0.05)
-        pl.camera_position = 'xz'
-        pl.camera.roll += 10
-        pl.camera.elevation += 10
+        # pl.camera_position = 'xz'
+        # pl.camera.roll += 10
+        # pl.camera.elevation += 10
         pl.show_axes()
 
         return pl
